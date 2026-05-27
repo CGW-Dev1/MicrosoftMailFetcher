@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $versionPath = Join-Path $PSScriptRoot "VERSION"
-$appPath = Join-Path $PSScriptRoot "app.py"
+$constantsPath = Join-Path $PSScriptRoot "mail_fetcher\constants.py"
 $readmePath = Join-Path $PSScriptRoot "README.md"
 
 if (-not (Test-Path $versionPath)) {
@@ -25,9 +25,9 @@ if ($minor -ge 9) {
 $next = "V$major.$minor"
 $next | Set-Content -LiteralPath $versionPath -Encoding UTF8
 
-$appText = Get-Content -LiteralPath $appPath -Raw -Encoding UTF8
-$appText = [regex]::Replace($appText, 'APP_VERSION = "V\d+\.\d+"', "APP_VERSION = `"$next`"")
-Set-Content -LiteralPath $appPath -Value $appText -Encoding UTF8
+$constantsText = Get-Content -LiteralPath $constantsPath -Raw -Encoding UTF8
+$constantsText = [regex]::Replace($constantsText, 'APP_VERSION = "V\d+\.\d+"', "APP_VERSION = `"$next`"")
+Set-Content -LiteralPath $constantsPath -Value $constantsText -Encoding UTF8
 
 if (Test-Path $readmePath) {
     $readme = Get-Content -LiteralPath $readmePath -Raw -Encoding UTF8

@@ -1,3 +1,4 @@
 msal>=1.33.0
 requests>=2.32.0
+PyQt6>=6.7.0
 pyinstaller>=6.10.0
