@@ -29,6 +29,7 @@ import requests
 
 APP_NAME = "OutlookHotmailMailFetcher"
 DISPLAY_NAME = "邮件验证码助手"
+APP_VERSION = "V1.0"
 AUTHORITY_BASE = "https://login.microsoftonline.com"
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 GRAPH_INTERACTIVE_SCOPES = ["Mail.Read", "offline_access"]
@@ -882,7 +883,7 @@ class MailFetcherApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         configure_default_fonts()
-        self.title(f"{DISPLAY_NAME} | IMAP + Graph API")
+        self.title(f"{DISPLAY_NAME} {APP_VERSION} | IMAP + Graph API")
         self.geometry("1480x860")
         self.minsize(1180, 720)
         self.configure(bg=BG)
@@ -932,7 +933,7 @@ class MailFetcherApp(tk.Tk):
         icon.pack(side="left")
         title_box = tk.Frame(header, bg=PANEL)
         title_box.pack(side="left", padx=(12, 0))
-        tk.Label(title_box, text=DISPLAY_NAME, bg=PANEL, fg=TEXT, font=("Microsoft YaHei UI", 16, "bold")).pack(anchor="w")
+        tk.Label(title_box, text=f"{DISPLAY_NAME} {APP_VERSION}", bg=PANEL, fg=TEXT, font=("Microsoft YaHei UI", 16, "bold")).pack(anchor="w")
         tk.Label(title_box, text="IMAP OAuth2 + Graph API 双协议", bg=PANEL, fg=MUTED, font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(2, 0))
         self.status_label = tk.Label(
             header,

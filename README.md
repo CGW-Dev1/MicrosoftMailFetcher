@@ -1,20 +1,28 @@
-# Outlook/Hotmail 最新邮件批量获取工具
+# 邮件验证码助手
+当前版本：V1.0
 
-这是一个本机桌面工具，用 Microsoft Graph 或 IMAP OAuth 读取已授权 Outlook/Hotmail 账号的最新收件箱邮件。
+本项目是一个本地 Windows 桌面工具，用于批量导入 Outlook/Hotmail 邮箱账号，并通过 Microsoft Graph 或 IMAP OAuth 获取最新邮件、提取验证码。
 
-## 安全模型
+## 下载
 
-- 导入账号时保存邮箱、密码、client_id、refresh_token 四段内容。
-- 四段内容使用 Windows DPAPI 加密后保存在当前 Windows 用户的 AppData 目录。
-- 也保留 Microsoft Graph/MSAL 交互授权作为备用方式。
+最新版 exe：
 
-## 准备 Microsoft Graph 应用
+```text
+https://github.com/CGW-Dev1/MicrosoftMailFetcher/raw/main/dist/邮件验证码助手.exe
+```
 
-1. 在 Microsoft Entra 管理中心创建应用注册。
-2. 支持的账号类型选择个人 Microsoft 账号，或个人账号 + 组织账号。
-3. 添加公共客户端/移动和桌面平台重定向 URI：`http://localhost`。
-4. 添加 delegated permission：`Mail.Read`。
-5. 复制 Application (client) ID 到本工具。
+## 版本规则
+
+- 当前版本从 `V1.0` 开始。
+- 小版本依次递增：`V1.0 -> V1.1 -> ... -> V1.9`。
+- 到 `V1.9` 后下一版自动变为 `V2.0`。
+- 版本号保存在 `VERSION` 文件中，同时显示在软件标题和主界面标题里。
+
+升级版本号：
+
+```powershell
+.\bump_version.ps1
+```
 
 ## 运行
 
@@ -35,38 +43,30 @@ python app.py
 dist\邮件验证码助手.exe
 ```
 
-## 官方参考
-
-- Microsoft Graph list messages: https://learn.microsoft.com/en-us/graph/api/user-list-messages
-- MSAL Python acquire tokens: https://learn.microsoft.com/en-us/entra/msal/python/getting-started/acquiring-tokens
-- Microsoft Graph auth concepts: https://learn.microsoft.com/en-us/graph/auth/auth-concepts
-- Microsoft identity refresh token flow: https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow
-- IMAP/POP/SMTP OAuth: https://learn.microsoft.com/en-us/exchange/client-developer/legacy-protocols/how-to-authenticate-an-imap-pop-smtp-application-by-using-oauth
-
 ## 导入格式
 
-工具兼容类似下面的行格式：
+每行一个账号，格式如下：
 
 ```text
-email@outlook.com----password----client-or-tenant-id----token
+email@outlook.com----password----client_id----refresh_token
 ```
 
-程序会读取并本地加密保存：
+四段内容会保存在本机当前 Windows 用户目录下，并使用 Windows DPAPI 加密保存。
 
-- 第 1 段：邮箱
-- 第 2 段：密码
-- 第 3 段：client_id
-- 第 4 段：Graph refresh_token
+## 主要功能
 
-导入后如果勾选“导入后自动取件”，程序会立即按当前协议设置批量获取邮件。默认协议是 Graph。
+- 批量导入账号，重复邮箱自动过滤。
+- 导入账号默认进入“未使用”菜单。
+- 支持标记已使用、取消标记、批量标记。
+- Graph 令牌 / IMAP 令牌切换，默认使用 Graph。
+- 支持简洁模式，只提取最新验证码。
+- 支持按邮箱、邮件内容、发件人搜索。
+- 支持导出账号和导出取件结果 CSV。
+- 支持复制邮箱。
+- 支持本地单文件 exe 打包。
 
-## 功能
+## 安全说明
 
-- 批量导入账号
-- 导入后自动取件
-- Graph / IMAP / Graph优先 / IMAP优先
-- 5、10、20、30 封快捷数量
-- 获取选中账号或全部账号
-- 查看邮件主题、发件人、预览内容
-- 导出 CSV
-- 删除、清空账号和结果
+- 导入的邮箱、密码、client_id、refresh_token 会保存在本机。
+- 保存文件使用当前 Windows 用户的 DPAPI 加密。
+- 导出账号时会按导入格式导出明文内容，方便备份和迁移。
