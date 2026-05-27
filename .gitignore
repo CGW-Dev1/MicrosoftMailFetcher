@@ -1,0 +1,7 @@
+__pycache__/
+build/
+*.spec
+*.pyc
+
+dist/*
+!dist/邮件验证码助手.exe
