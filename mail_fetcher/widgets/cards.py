@@ -25,13 +25,13 @@ class AccountCard(ClickableFrame):
         self.account = account
         self.setObjectName("AccountCard")
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(52)
-        self.setMaximumHeight(52)
+        self.setMinimumHeight(46)
+        self.setMaximumHeight(46)
         self.clicked.connect(self.toggle_selection)
 
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(10, 5, 10, 5)
-        layout.setSpacing(8)
+        layout.setContentsMargins(8, 3, 8, 3)
+        layout.setSpacing(6)
 
         self.checkbox = CheckBox()
         self.checkbox.setChecked(checked)
@@ -49,8 +49,7 @@ class AccountCard(ClickableFrame):
         self.email_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         text_box.addWidget(self.email_label)
 
-        usage = "已使用" if account.used else "未使用"
-        self.meta_label = ElidedLabel(f"{usage} · {account.source} · {account.last_status}")
+        self.meta_label = ElidedLabel(f"{account.category_label} · {account.source} · {account.last_status}")
         self.meta_label.setObjectName("AccountMeta")
         self.meta_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         text_box.addWidget(self.meta_label)
@@ -58,7 +57,7 @@ class AccountCard(ClickableFrame):
         layout.addWidget(text_host, 1)
 
         self.copy_button = pill_button("复制", role="ghost")
-        self.copy_button.setFixedWidth(64)
+        self.copy_button.setFixedSize(54, 32)
         self.copy_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         self.copy_button.clicked.connect(lambda: self.copy_requested.emit(self.account.email))
         layout.addWidget(self.copy_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -76,12 +75,12 @@ class MailCard(ClickableFrame):
         self.setObjectName("MailCard")
         self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(112)
+        self.setMinimumHeight(96)
         self.clicked.connect(lambda: self.open_requested.emit(self.row))
 
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(18, 12, 18, 12)
-        layout.setSpacing(6)
+        layout.setContentsMargins(14, 9, 14, 9)
+        layout.setSpacing(4)
 
         top = QtWidgets.QHBoxLayout()
         top.setSpacing(8)

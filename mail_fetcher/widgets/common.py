@@ -86,7 +86,7 @@ class CheckBox(QtWidgets.QCheckBox):
             painter.drawLine(QtCore.QPointF(box.left() + 9.8, box.top() + 16.4), QtCore.QPointF(box.left() + 18.0, box.top() + 6.8))
 
         if self.text():
-            painter.setPen(QtGui.QColor("#16304d"))
+            painter.setPen(self.palette().color(QtGui.QPalette.ColorRole.WindowText))
             text_rect = QtCore.QRectF(box.right() + 10, 0, rect.width() - box.right() - 10, rect.height())
             painter.drawText(text_rect, QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft, self.text())
 
@@ -99,28 +99,28 @@ class CountSelector(QtWidgets.QFrame):
         self.setObjectName("CountSelect")
         self.options = options
         self.current_value = current
+        self.setToolTip(label)
+        self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.setFixedSize(132, 40)
 
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(18, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(14, 0, 10, 0)
+        layout.setSpacing(4)
 
-        self.label = QtWidgets.QLabel(label)
-        self.label.setObjectName("MailSender")
-        layout.addWidget(self.label, 1)
-
-        self.value_button = QtWidgets.QPushButton(current)
+        self.value_button = QtWidgets.QPushButton(self.display_text(current))
         self.value_button.setProperty("role", "dropdown-value")
         self.value_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self.value_button.clicked.connect(self.open_menu)
-        self.value_button.setFixedWidth(62)
-        layout.addWidget(self.value_button)
+        self.value_button.setToolTip(label)
+        layout.addWidget(self.value_button, 1)
 
         self.arrow_button = QtWidgets.QToolButton()
         self.arrow_button.setText("▾")
         self.arrow_button.setProperty("role", "dropdown-arrow")
         self.arrow_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self.arrow_button.clicked.connect(self.open_menu)
-        self.arrow_button.setFixedWidth(26)
+        self.arrow_button.setToolTip(label)
+        self.arrow_button.setFixedWidth(24)
         layout.addWidget(self.arrow_button)
 
     def currentText(self) -> str:
@@ -128,20 +128,31 @@ class CountSelector(QtWidgets.QFrame):
 
     def setCurrentText(self, value: str) -> None:
         self.current_value = value
-        self.value_button.setText(value)
+        self.value_button.setText(self.display_text(value))
 
     def open_menu(self) -> None:
         menu = QtWidgets.QMenu(self)
         for option in self.options:
-            action = menu.addAction(option)
+            action = menu.addAction(self.display_text(option))
             action.triggered.connect(lambda checked=False, value=option: self._choose(value))
-        menu.exec(self.arrow_button.mapToGlobal(QtCore.QPoint(0, self.arrow_button.height())))
+        menu.exec(self.mapToGlobal(QtCore.QPoint(0, self.height())))
 
     def _choose(self, value: str) -> None:
         if value == self.current_value:
             return
         self.setCurrentText(value)
         self.currentTextChanged.emit(value)
+
+    @staticmethod
+    def display_text(value: str) -> str:
+        return f"{value} 封"
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self.open_menu()
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
 
 class BadgeLabel(QtWidgets.QLabel):

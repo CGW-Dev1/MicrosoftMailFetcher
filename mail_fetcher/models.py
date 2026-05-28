@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .constants import ACCOUNT_CATEGORY_LABELS, ACCOUNT_CATEGORY_UNUSED
+
 
 @dataclass
 class AccountRecord:
@@ -13,10 +15,15 @@ class AccountRecord:
     last_fetch_at: str = ""
     last_status: str = "未取件"
     used: bool = False
+    category: str = ACCOUNT_CATEGORY_UNUSED
 
     @property
     def source(self) -> str:
         return "OAuth令牌" if self.client_id and self.refresh_token else "交互授权"
+
+    @property
+    def category_label(self) -> str:
+        return ACCOUNT_CATEGORY_LABELS.get(self.category, ACCOUNT_CATEGORY_LABELS[ACCOUNT_CATEGORY_UNUSED])
 
 
 @dataclass
@@ -25,3 +32,4 @@ class ImportRecord:
     password: str = ""
     client_id: str = ""
     refresh_token: str = ""
+    category: str = ACCOUNT_CATEGORY_UNUSED

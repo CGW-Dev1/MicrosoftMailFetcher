@@ -4,7 +4,17 @@ from pathlib import Path
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from .constants import APP_VERSION, DISPLAY_NAME, EXPORT_TOP_OPTIONS
+from .constants import (
+    ACCOUNT_CATEGORY_BANNED,
+    ACCOUNT_CATEGORY_FREE,
+    ACCOUNT_CATEGORY_LABELS,
+    ACCOUNT_CATEGORY_ORDER,
+    ACCOUNT_CATEGORY_PLUS,
+    ACCOUNT_CATEGORY_UNUSED,
+    APP_VERSION,
+    DISPLAY_NAME,
+    EXPORT_TOP_OPTIONS,
+)
 from .dialogs import ImportDialog, MailDetailDialog
 from .models import AccountRecord, ImportRecord
 from .parsing import compact_text
@@ -31,98 +41,155 @@ RED_SOFT = "#fff3f2"
 RED = "#e25353"
 
 
-def app_stylesheet() -> str:
+def app_stylesheet(theme: str = "light") -> str:
+    if theme == "dark":
+        surface = "#192333"
+        surface_soft = "#142033"
+        border = "#2d405c"
+        bg = "#0f1724"
+        text = "#eef5ff"
+        muted = "#9fb1c7"
+        blue = "#4f8cff"
+        blue_dark = "#3a73dd"
+        teal = "#20c7b7"
+        green = "#39d79a"
+        green_soft = "#12382f"
+        cyan_soft = "#123044"
+        cyan_text = "#62c7ff"
+        blue_soft = "#1b3158"
+        red_soft = "#3d2427"
+        red = "#ff7a7a"
+        tab_bg = "#22324a"
+        disabled_bg = "#263244"
+        disabled_text = "#708198"
+        input_selection = "#274d86"
+        accent_hover = "#25416f"
+        scrollbar = "#3a5273"
+    else:
+        surface = SURFACE
+        surface_soft = SURFACE_SOFT
+        border = BORDER
+        bg = BG
+        text = TEXT
+        muted = MUTED
+        blue = BLUE
+        blue_dark = BLUE_DARK
+        teal = TEAL
+        green = GREEN
+        green_soft = GREEN_SOFT
+        cyan_soft = CYAN_SOFT
+        cyan_text = CYAN_TEXT
+        blue_soft = BLUE_SOFT
+        red_soft = RED_SOFT
+        red = RED
+        tab_bg = "#edf3fb"
+        disabled_bg = "#e8eef6"
+        disabled_text = "#a2b2c5"
+        input_selection = "#dbeafe"
+        accent_hover = "#d2e0ff"
+        scrollbar = "#cfe0f6"
     return f"""
     QWidget {{
-        color: {TEXT};
-        font-family: "Segoe UI", "Microsoft YaHei UI";
+        color: {text};
+        font-family: "Microsoft YaHei", "Microsoft YaHei UI", "Segoe UI";
         font-size: 14px;
     }}
     QLabel {{
         background: transparent;
     }}
     QMainWindow, QWidget#CentralRoot {{
-        background: {BG};
+        background: {bg};
+    }}
+    QDialog {{
+        background: {bg};
+        color: {text};
+    }}
+    QDialog QWidget {{
+        background: {bg};
+        color: {text};
     }}
     QFrame#HeaderCard, QFrame#SidebarCard, QFrame#ControlsCard, QFrame#MailCard, QFrame#AccountCard, QFrame#StatCard {{
-        background: {SURFACE};
-        border: 1px solid {BORDER};
-        border-radius: 20px;
+        background: {surface};
+        border: 1px solid {border};
+        border-radius: 16px;
     }}
     QFrame#CountSelect {{
-        background: {SURFACE};
-        border: 1px solid {BORDER};
-        border-radius: 18px;
+        background: {surface};
+        border: 1px solid {border};
+        border-radius: 14px;
+    }}
+    QFrame#CountSelect:hover {{
+        border: 1px solid {blue};
     }}
     QFrame#SidebarCard {{
-        background: {SURFACE_SOFT};
+        background: {surface_soft};
     }}
     QFrame#AccountCard {{
-        min-height: 52px;
+        min-height: 46px;
     }}
     QFrame#MailCard {{
-        min-height: 112px;
+        min-height: 96px;
     }}
     QLabel#HeroTitle {{
-        font-size: 26px;
+        font-size: 23px;
         font-weight: 700;
-        color: {TEXT};
+        color: {text};
     }}
     QLabel#HeroSubTitle {{
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 600;
-        color: {MUTED};
+        color: {muted};
     }}
     QLabel#SectionTitle {{
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 700;
-        color: {TEXT};
+        color: {text};
     }}
     QLabel#AccountEmail {{
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 600;
-        color: {TEXT};
+        color: {text};
     }}
     QLabel#AccountMeta, QLabel#MailMeta, QLabel#DialogText {{
-        color: {MUTED};
-        font-size: 11px;
+        color: {muted};
+        font-size: 12px;
     }}
     QLabel#MailSender {{
         font-size: 13px;
         font-weight: 700;
-        color: {TEXT};
+        color: {text};
     }}
     QLabel#MailSubject {{
         font-size: 15px;
         font-weight: 700;
-        color: {TEXT};
+        color: {text};
     }}
     QLabel#MailPreview {{
-        color: {MUTED};
+        color: {muted};
         font-size: 12px;
         font-weight: 500;
     }}
     QLabel#ProgressText {{
-        color: {MUTED};
+        color: {muted};
         font-size: 12px;
         font-weight: 600;
     }}
     QLabel#DialogTitle {{
         font-size: 24px;
         font-weight: 700;
-        color: {TEXT};
+        color: {text};
     }}
     QLabel#StatusLabel {{
-        background: {GREEN_SOFT};
+        background: {green_soft};
         border: 1px solid transparent;
         border-radius: 14px;
-        color: {GREEN};
+        color: {green};
         font-weight: 700;
         padding: 10px 14px;
     }}
     QLabel#SidebarCount {{
-        background: {BLUE_SOFT};
-        color: {BLUE};
+        background: {blue_soft};
+        color: {blue};
         border-radius: 12px;
         padding: 6px 12px;
         font-weight: 700;
@@ -134,27 +201,33 @@ def app_stylesheet() -> str:
         min-width: 74px;
     }}
     QLabel#BadgeLabel[tone="green"] {{
-        background: {GREEN_SOFT};
-        color: {GREEN};
+        background: {green_soft};
+        color: {green};
     }}
     QLabel#BadgeLabel[tone="cyan"] {{
-        background: {CYAN_SOFT};
-        color: {CYAN_TEXT};
+        background: {cyan_soft};
+        color: {cyan_text};
     }}
     QLabel#BadgeLabel[tone="blue"] {{
-        background: {BLUE_SOFT};
-        color: {BLUE};
+        background: {blue_soft};
+        color: {blue};
     }}
     QLineEdit#SearchField, QPlainTextEdit#ImportEditor, QTextEdit#DetailViewer, QComboBox#CountCombo {{
-        background: {SURFACE};
-        border: 1px solid {BORDER};
-        border-radius: 14px;
-        padding: 12px 14px;
-        color: {TEXT};
-        selection-background-color: #dbeafe;
+        background: {surface};
+        border: 1px solid {border};
+        border-radius: 12px;
+        padding: 9px 12px;
+        color: {text};
+        selection-background-color: {input_selection};
+        selection-color: white;
+    }}
+    QPlainTextEdit#ImportEditor QWidget,
+    QTextEdit#DetailViewer QWidget {{
+        background: {surface};
+        color: {text};
     }}
     QLineEdit#SearchField:focus, QPlainTextEdit#ImportEditor:focus, QTextEdit#DetailViewer:focus, QComboBox#CountCombo:focus {{
-        border: 1px solid {BLUE};
+        border: 1px solid {blue};
     }}
     QComboBox#CountCombo {{
         padding-right: 32px;
@@ -173,89 +246,102 @@ def app_stylesheet() -> str:
         height: 12px;
     }}
     QPushButton {{
-        border-radius: 14px;
-        padding: 9px 16px;
+        border-radius: 12px;
+        padding: 7px 12px;
         font-weight: 700;
         border: 1px solid transparent;
     }}
     QPushButton[role="primary"] {{
-        background: {BLUE};
+        background: {blue};
         color: white;
     }}
     QPushButton[role="primary"]:hover {{
-        background: {BLUE_DARK};
+        background: {blue_dark};
     }}
     QPushButton[role="secondary"] {{
-        background: {SURFACE};
-        color: {TEXT};
-        border: 1px solid {BORDER};
+        background: {surface};
+        color: {text};
+        border: 1px solid {border};
     }}
     QPushButton[role="secondary"]:hover {{
-        border: 1px solid {BLUE};
-        color: {BLUE};
+        border: 1px solid {blue};
+        color: {blue};
     }}
     QPushButton[role="accent"] {{
-        background: {BLUE_SOFT};
-        color: {BLUE};
+        background: {blue_soft};
+        color: {blue};
     }}
     QPushButton[role="accent"]:hover {{
-        background: #d2e0ff;
+        background: {accent_hover};
     }}
     QPushButton[role="danger"] {{
-        background: {RED_SOFT};
-        color: {RED};
+        background: {red_soft};
+        color: {red};
     }}
     QPushButton[role="ghost"] {{
-        background: {SURFACE};
-        color: {BLUE};
-        border: 1px solid {BORDER};
-        padding: 8px 14px;
+        background: {surface};
+        color: {blue};
+        border: 1px solid {border};
+        padding: 5px 8px;
     }}
     QPushButton[role="dropdown-value"] {{
-        background: #f3f7ff;
-        color: {TEXT};
-        border: 1px solid #d6e3f5;
-        border-radius: 12px;
-        padding: 8px 10px;
+        background: transparent;
+        color: {text};
+        border: none;
+        border-radius: 0;
+        padding: 0;
         font-weight: 700;
+        text-align: left;
     }}
     QToolButton[role="dropdown-arrow"] {{
         background: transparent;
         border: none;
-        color: {MUTED};
-        font-size: 16px;
+        color: {muted};
+        font-size: 14px;
         padding: 0;
     }}
     QPushButton[role="tab"] {{
-        background: #edf3fb;
-        color: {TEXT};
+        background: {tab_bg};
+        color: {text};
         border: 1px solid transparent;
     }}
     QPushButton[role="tab"]:checked, QPushButton[role="protocol"]:checked {{
-        background: {BLUE};
+        background: {blue};
         color: white;
     }}
     QPushButton[role="protocol"] {{
-        background: #edf3fb;
-        color: {TEXT};
+        background: {tab_bg};
+        color: {text};
     }}
     QPushButton:disabled {{
-        background: #e8eef6;
-        color: #a2b2c5;
+        background: {disabled_bg};
+        color: {disabled_text};
         border-color: transparent;
     }}
     QProgressBar {{
-        background: #e7eef8;
+        background: {tab_bg};
         border-radius: 7px;
         border: none;
         min-height: 10px;
     }}
     QProgressBar::chunk {{
-        background: {TEAL};
+        background: {teal};
         border-radius: 7px;
     }}
     QScrollArea {{
         border: none;
+        background: transparent;
+    }}
+    QScrollArea#AccountScroll QWidget#AccountViewport,
+    QWidget#AccountContainer {{
+        background: {surface_soft};
+    }}
+    QScrollArea#ResultScroll QWidget#ResultViewport,
+    QWidget#ResultContainer {{
+        background: {bg};
+    }}
+    QScrollArea#AccountScroll,
+    QScrollArea#ResultScroll {{
         background: transparent;
     }}
     QScrollBar:vertical {{
@@ -264,7 +350,7 @@ def app_stylesheet() -> str:
         margin: 4px 0 4px 0;
     }}
     QScrollBar::handle:vertical {{
-        background: #cfe0f6;
+        background: {scrollbar};
         border-radius: 5px;
         min-height: 36px;
     }}
@@ -292,7 +378,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowTitle(f"{DISPLAY_NAME} {APP_VERSION} | IMAP + Graph API")
         self.resize(1520, 920)
         self.setMinimumSize(1260, 760)
-        self.setStyleSheet(app_stylesheet())
 
         icon_path = Path(__file__).resolve().parent.parent / "assets" / "mail.ico"
         if icon_path.exists():
@@ -300,6 +385,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.account_store = AccountStore()
         self.config_store = ConfigStore()
+        self.setStyleSheet(app_stylesheet(self.config_store.theme))
         self.mail_service = MailService(self.config_store, self.account_store)
 
         self.fetch_worker: FetchWorker | None = None
@@ -320,14 +406,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(root)
 
         outer = QtWidgets.QVBoxLayout(root)
-        outer.setContentsMargins(18, 14, 18, 14)
-        outer.setSpacing(12)
+        outer.setContentsMargins(14, 10, 14, 10)
+        outer.setSpacing(10)
 
         header = self.make_header(icon_path)
         outer.addWidget(header)
 
         body = QtWidgets.QHBoxLayout()
-        body.setSpacing(16)
+        body.setSpacing(12)
         outer.addLayout(body, 1)
 
         self.sidebar = self.make_sidebar()
@@ -340,16 +426,16 @@ class MainWindow(QtWidgets.QMainWindow):
         frame = QtWidgets.QFrame()
         frame.setObjectName("HeaderCard")
         layout = QtWidgets.QHBoxLayout(frame)
-        layout.setContentsMargins(20, 14, 20, 14)
-        layout.setSpacing(14)
+        layout.setContentsMargins(16, 10, 16, 10)
+        layout.setSpacing(12)
 
         icon_box = QtWidgets.QLabel()
         icon_box.setFixedSize(48, 48)
-        icon_box.setStyleSheet(f"background:{BLUE}; border-radius:18px;")
+        icon_box.setStyleSheet("background: transparent; border: none;")
         icon_box.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         if icon_path.exists():
             icon = QtGui.QIcon(str(icon_path))
-            pixmap = icon.pixmap(QtCore.QSize(30, 30))
+            pixmap = icon.pixmap(QtCore.QSize(48, 48))
             icon_box.setPixmap(pixmap)
         else:
             icon_box.setText("✉")
@@ -368,23 +454,29 @@ class MainWindow(QtWidgets.QMainWindow):
         titles.addWidget(subtitle)
         layout.addLayout(titles, 1)
 
+        self.dark_mode_box = CheckBox("深色模式")
+        self.dark_mode_box.setFixedSize(104, 38)
+        self.dark_mode_box.setChecked(self.config_store.theme == "dark")
+        self.dark_mode_box.toggled.connect(self.apply_theme)
+        layout.addWidget(self.dark_mode_box, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+
         self.status_label = QtWidgets.QLabel("就绪")
         self.status_label.setObjectName("StatusLabel")
         self.status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.status_label.setWordWrap(True)
         self.status_label.setMinimumWidth(340)
-        self.status_label.setMinimumHeight(44)
+        self.status_label.setMinimumHeight(38)
         layout.addWidget(self.status_label, 0, QtCore.Qt.AlignmentFlag.AlignTop)
         return frame
 
     def make_sidebar(self) -> QtWidgets.QFrame:
         frame = QtWidgets.QFrame()
         frame.setObjectName("SidebarCard")
-        frame.setFixedWidth(410)
+        frame.setFixedWidth(430)
 
         layout = QtWidgets.QVBoxLayout(frame)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(6)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(5)
 
         top = QtWidgets.QHBoxLayout()
         title = QtWidgets.QLabel("邮箱列表")
@@ -398,55 +490,82 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.account_search = SearchField("邮箱搜索")
         self.account_search.textChanged.connect(lambda: self.refresh_accounts(reset_scroll=True))
+        self.account_search.setFixedHeight(38)
         layout.addWidget(self.account_search)
 
         group_line = QtWidgets.QHBoxLayout()
-        group_line.setSpacing(8)
+        group_line.setSpacing(6)
         self.unused_button = pill_button("未使用", role="tab", checkable=True)
-        self.used_button = pill_button("已使用", role="tab", checkable=True)
+        self.plus_button = pill_button("Plus", role="tab", checkable=True)
+        self.free_button = pill_button("Free", role="tab", checkable=True)
+        self.banned_button = pill_button("已封禁", role="tab", checkable=True)
         self.unused_button.setChecked(True)
-        self.unused_button.clicked.connect(lambda: self.set_account_group("unused"))
-        self.used_button.clicked.connect(lambda: self.set_account_group("used"))
-        group_line.addWidget(self.unused_button)
-        group_line.addWidget(self.used_button)
+        self.unused_button.clicked.connect(lambda: self.set_account_group(ACCOUNT_CATEGORY_UNUSED))
+        self.plus_button.clicked.connect(lambda: self.set_account_group(ACCOUNT_CATEGORY_PLUS))
+        self.free_button.clicked.connect(lambda: self.set_account_group(ACCOUNT_CATEGORY_FREE))
+        self.banned_button.clicked.connect(lambda: self.set_account_group(ACCOUNT_CATEGORY_BANNED))
+        for button in (self.unused_button, self.plus_button, self.free_button, self.banned_button):
+            button.setFixedHeight(36)
+            button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+            group_line.addWidget(button)
         layout.addLayout(group_line)
 
-        import_button = pill_button("+  批量导入邮箱", role="primary")
+        import_export_line = QtWidgets.QHBoxLayout()
+        import_export_line.setSpacing(6)
+        import_button = pill_button("批量导入邮箱", role="primary")
         import_button.clicked.connect(self.open_import_dialog)
-        layout.addWidget(import_button)
-
-        export_button = pill_button("⇩  导出邮箱", role="secondary")
+        import_button.setFixedHeight(38)
+        export_button = pill_button("导出邮箱", role="secondary")
         export_button.clicked.connect(self.export_accounts)
-        layout.addWidget(export_button)
+        export_button.setFixedHeight(38)
+        import_export_line.addWidget(import_button, 1)
+        import_export_line.addWidget(export_button, 1)
+        layout.addLayout(import_export_line)
 
         select_line = QtWidgets.QHBoxLayout()
+        select_line.setSpacing(6)
         self.select_all_box = CheckBox("全选")
+        self.select_all_box.setFixedHeight(30)
         self.select_all_box.setChecked(True)
         self.select_all_box.toggled.connect(self.toggle_all_accounts)
         select_line.addWidget(self.select_all_box)
         select_line.addStretch(1)
         delete_button = pill_button("删除选中", role="danger")
         delete_button.clicked.connect(self.remove_selected)
+        delete_button.setFixedHeight(34)
         select_line.addWidget(delete_button)
         layout.addLayout(select_line)
 
         usage_line = QtWidgets.QHBoxLayout()
-        usage_line.setSpacing(8)
-        mark_button = pill_button("标记已使用", role="accent")
-        mark_button.clicked.connect(self.mark_selected_used)
-        usage_line.addWidget(mark_button)
-        unmark_button = pill_button("取消标记", role="secondary")
-        unmark_button.clicked.connect(self.mark_selected_unused)
-        usage_line.addWidget(unmark_button)
+        usage_line.setSpacing(6)
+        mark_plus_button = pill_button("Plus", role="accent")
+        mark_plus_button.setToolTip("标记选中邮箱为 Plus")
+        mark_plus_button.clicked.connect(lambda: self.set_selected_category(ACCOUNT_CATEGORY_PLUS))
+        mark_free_button = pill_button("Free", role="accent")
+        mark_free_button.setToolTip("标记选中邮箱为 Free")
+        mark_free_button.clicked.connect(lambda: self.set_selected_category(ACCOUNT_CATEGORY_FREE))
+        mark_banned_button = pill_button("封禁", role="danger")
+        mark_banned_button.setToolTip("标记选中邮箱为已封禁")
+        mark_banned_button.clicked.connect(lambda: self.set_selected_category(ACCOUNT_CATEGORY_BANNED))
+        unmark_button = pill_button("未使用", role="secondary")
+        unmark_button.setToolTip("将选中邮箱移回未使用")
+        unmark_button.clicked.connect(lambda: self.set_selected_category(ACCOUNT_CATEGORY_UNUSED))
+        for button in (mark_plus_button, mark_free_button, mark_banned_button, unmark_button):
+            button.setFixedHeight(36)
+            button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+            usage_line.addWidget(button)
         layout.addLayout(usage_line)
 
         self.account_scroll = QtWidgets.QScrollArea()
+        self.account_scroll.setObjectName("AccountScroll")
+        self.account_scroll.viewport().setObjectName("AccountViewport")
         self.account_scroll.setWidgetResizable(True)
         self.account_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.account_container = QtWidgets.QWidget()
+        self.account_container.setObjectName("AccountContainer")
         self.account_layout = QtWidgets.QVBoxLayout(self.account_container)
         self.account_layout.setContentsMargins(0, 0, 0, 0)
-        self.account_layout.setSpacing(8)
+        self.account_layout.setSpacing(4)
         self.account_layout.addStretch(1)
         self.account_scroll.setWidget(self.account_container)
         layout.addWidget(self.account_scroll, 1)
@@ -463,75 +582,79 @@ class MainWindow(QtWidgets.QMainWindow):
         panel = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(14)
+        layout.setSpacing(6)
 
         controls = QtWidgets.QFrame()
         controls.setObjectName("ControlsCard")
         controls_layout = QtWidgets.QVBoxLayout(controls)
-        controls_layout.setContentsMargins(16, 14, 16, 14)
-        controls_layout.setSpacing(10)
+        controls_layout.setContentsMargins(14, 8, 14, 8)
+        controls_layout.setSpacing(6)
 
         top_row = QtWidgets.QHBoxLayout()
         top_row.setSpacing(12)
         self.keyword_search = SearchField("邮件搜索")
+        self.keyword_search.setFixedHeight(40)
         self.keyword_search.textChanged.connect(lambda: self.render_results())
-        top_row.addWidget(self.keyword_search, 1)
+        top_row.addWidget(self.keyword_search, 3)
         self.sender_search = SearchField("发件人搜索")
+        self.sender_search.setFixedHeight(40)
         self.sender_search.textChanged.connect(lambda: self.render_results())
-        top_row.addWidget(self.sender_search, 1)
+        top_row.addWidget(self.sender_search, 2)
         self.count_card = self.make_count_card()
-        top_row.addWidget(self.count_card, 1)
+        top_row.addWidget(self.count_card, 0, QtCore.Qt.AlignmentFlag.AlignRight)
         controls_layout.addLayout(top_row)
 
-        middle_row = QtWidgets.QHBoxLayout()
-        middle_row.setSpacing(10)
+        toolbar_row = QtWidgets.QHBoxLayout()
+        toolbar_row.setSpacing(10)
         self.imap_button = pill_button("IMAP令牌", role="protocol", checkable=True)
         self.graph_button = pill_button("Graph令牌", role="protocol", checkable=True)
         self.imap_button.clicked.connect(lambda: self.set_protocol("IMAP"))
         self.graph_button.clicked.connect(lambda: self.set_protocol("Graph"))
-        middle_row.addWidget(self.imap_button)
-        middle_row.addWidget(self.graph_button)
+        toolbar_buttons: list[QtWidgets.QPushButton] = [self.imap_button, self.graph_button]
 
         self.auto_fetch_box = CheckBox("导入后自动取件")
+        self.auto_fetch_box.setFixedSize(152, 38)
         self.auto_fetch_box.setChecked(self.config_store.auto_fetch_after_import)
         self.auto_fetch_box.toggled.connect(self.save_config)
-        middle_row.addWidget(self.auto_fetch_box)
 
         self.concise_mode_box = CheckBox("简洁模式")
+        self.concise_mode_box.setFixedSize(104, 38)
         self.concise_mode_box.setChecked(self.config_store.concise_mode)
         self.concise_mode_box.toggled.connect(self.save_config)
-        middle_row.addWidget(self.concise_mode_box)
-        middle_row.addStretch(1)
-        controls_layout.addLayout(middle_row)
 
-        action_row = QtWidgets.QHBoxLayout()
-        action_row.setSpacing(10)
         export_csv_button = pill_button("导出CSV", role="secondary")
         export_csv_button.clicked.connect(self.export_csv)
-        action_row.addWidget(export_csv_button)
         self.stop_button = pill_button("停止", role="secondary")
         self.stop_button.clicked.connect(self.request_stop)
-        action_row.addWidget(self.stop_button)
-        action_row.addStretch(1)
-        self.fetch_selected_button = pill_button("⇩  选中取件", role="primary")
+        self.fetch_selected_button = pill_button("选中取件", role="primary")
         self.fetch_selected_button.clicked.connect(self.fetch_selected)
-        action_row.addWidget(self.fetch_selected_button)
-        self.fetch_all_button = pill_button("⇩  全部取件", role="primary")
+        self.fetch_all_button = pill_button("全部取件", role="primary")
         self.fetch_all_button.clicked.connect(self.fetch_all)
         self.fetch_all_button.setStyleSheet("")
-        action_row.addWidget(self.fetch_all_button)
-        controls_layout.addLayout(action_row)
+        toolbar_buttons.extend([export_csv_button, self.stop_button, self.fetch_selected_button, self.fetch_all_button])
+
+        for button in toolbar_buttons:
+            self.prepare_toolbar_button(button)
+            toolbar_row.addWidget(button)
+
+        toolbar_row.addSpacing(4)
+        toolbar_row.addWidget(self.auto_fetch_box)
+        toolbar_row.addWidget(self.concise_mode_box)
+        toolbar_row.addStretch(1)
+        controls_layout.addLayout(toolbar_row)
 
         layout.addWidget(controls)
 
         self.progress_text = QtWidgets.QLabel("等待操作")
         self.progress_text.setObjectName("ProgressText")
+        self.progress_text.setMaximumHeight(18)
         layout.addWidget(self.progress_text)
 
         self.progress_bar = QtWidgets.QProgressBar()
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
+        self.progress_bar.setMaximumHeight(10)
         layout.addWidget(self.progress_bar)
 
         header = QtWidgets.QHBoxLayout()
@@ -548,16 +671,24 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addLayout(header)
 
         self.result_scroll = QtWidgets.QScrollArea()
+        self.result_scroll.setObjectName("ResultScroll")
+        self.result_scroll.viewport().setObjectName("ResultViewport")
         self.result_scroll.setWidgetResizable(True)
         self.result_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.result_container = QtWidgets.QWidget()
+        self.result_container.setObjectName("ResultContainer")
         self.result_layout = QtWidgets.QVBoxLayout(self.result_container)
         self.result_layout.setContentsMargins(0, 0, 0, 0)
-        self.result_layout.setSpacing(8)
+        self.result_layout.setSpacing(5)
         self.result_layout.addStretch(1)
         self.result_scroll.setWidget(self.result_container)
         layout.addWidget(self.result_scroll, 1)
         return panel
+
+    @staticmethod
+    def prepare_toolbar_button(button: QtWidgets.QPushButton) -> None:
+        button.setFixedSize(104, 38)
+        button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
 
     def make_count_card(self) -> QtWidgets.QFrame:
         selector = CountSelector("每个邮箱最大取件数", EXPORT_TOP_OPTIONS, str(self.config_store.top))
@@ -576,7 +707,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.config_store.top = max(1, min(top, 50))
         self.config_store.auto_fetch_after_import = self.auto_fetch_box.isChecked()
         self.config_store.concise_mode = self.concise_mode_box.isChecked()
+        if hasattr(self, "dark_mode_box"):
+            self.config_store.theme = "dark" if self.dark_mode_box.isChecked() else "light"
         self.config_store.save()
+
+    def apply_theme(self) -> None:
+        self.config_store.theme = "dark" if self.dark_mode_box.isChecked() else "light"
+        self.setStyleSheet(app_stylesheet(self.config_store.theme))
+        self.save_config()
 
     @property
     def protocol(self) -> str:
@@ -593,21 +731,34 @@ class MainWindow(QtWidgets.QMainWindow):
             self.graph_button.setChecked(True)
         for name, button in (("IMAP", self.imap_button), ("Graph", self.graph_button)):
             active = button.isChecked()
-            label = f"{name}令牌"
-            button.setText(f"当前 {label}" if active else label)
+            button.setText(f"{name}令牌")
+            button.setToolTip(f"当前使用{name}令牌" if active else f"切换到{name}令牌")
 
     def current_group(self) -> str:
-        return "used" if self.used_button.isChecked() else "unused"
+        if self.plus_button.isChecked():
+            return ACCOUNT_CATEGORY_PLUS
+        if self.free_button.isChecked():
+            return ACCOUNT_CATEGORY_FREE
+        if self.banned_button.isChecked():
+            return ACCOUNT_CATEGORY_BANNED
+        return ACCOUNT_CATEGORY_UNUSED
 
     def set_account_group(self, group: str) -> None:
-        self.unused_button.setChecked(group == "unused")
-        self.used_button.setChecked(group == "used")
+        if group not in ACCOUNT_CATEGORY_LABELS:
+            group = ACCOUNT_CATEGORY_UNUSED
+        self.unused_button.setChecked(group == ACCOUNT_CATEGORY_UNUSED)
+        self.plus_button.setChecked(group == ACCOUNT_CATEGORY_PLUS)
+        self.free_button.setChecked(group == ACCOUNT_CATEGORY_FREE)
+        self.banned_button.setChecked(group == ACCOUNT_CATEGORY_BANNED)
         self.refresh_accounts(reset_scroll=True)
 
     def filtered_accounts(self) -> list[AccountRecord]:
         needle = self.account_search.text().strip().lower()
-        show_used = self.current_group() == "used"
-        pool = [account for account in self.account_store.accounts if account.used == show_used]
+        current = self.current_group()
+        pool = sorted(
+            [account for account in self.account_store.accounts if account.category == current],
+            key=lambda account: account.email.lower(),
+        )
         if not needle:
             return pool
         starts = [account for account in pool if account.email.lower().startswith(needle)]
@@ -673,7 +824,9 @@ class MainWindow(QtWidgets.QMainWindow):
         added, updated, skipped = self.account_store.upsert_records(records)
         for record in records:
             self.account_states.setdefault(record.email, True)
-        self.set_account_group("unused")
+        imported_groups = [record.category for record in records if record.category in ACCOUNT_CATEGORY_LABELS]
+        target_group = next((group for group in imported_groups if group != ACCOUNT_CATEGORY_UNUSED), ACCOUNT_CATEGORY_UNUSED)
+        self.set_account_group(target_group)
         self.refresh_accounts(reset_scroll=True)
         self.update_status(f"导入完成：新增 {added}，重复 {skipped}")
         if invalid:
@@ -688,13 +841,33 @@ class MainWindow(QtWidgets.QMainWindow):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "导出邮箱", "", "Text files (*.txt)")
         if not path:
             return
-        accounts = sorted(self.account_store.accounts, key=lambda account: account.email.lower())
-        lines = [
-            "----".join([account.email, account.password, account.client_id, account.refresh_token])
-            for account in accounts
-        ]
+        order = {category: index for index, category in enumerate(ACCOUNT_CATEGORY_ORDER)}
+        accounts = sorted(
+            self.account_store.accounts,
+            key=lambda account: (order.get(account.category, 99), account.email.lower()),
+        )
+        lines: list[str] = []
+        current_category = ""
+        for account in accounts:
+            label = ACCOUNT_CATEGORY_LABELS.get(account.category, ACCOUNT_CATEGORY_LABELS[ACCOUNT_CATEGORY_UNUSED])
+            if account.category != current_category:
+                if lines:
+                    lines.append("")
+                lines.append(f"# ===== {label} =====")
+                current_category = account.category
+            lines.append(
+                "----".join(
+                    [
+                        account.email,
+                        account.password,
+                        account.client_id,
+                        account.refresh_token,
+                        label,
+                    ]
+                )
+            )
         Path(path).write_text("\n".join(lines), encoding="utf-8")
-        self.update_status(f"已导出 {len(lines)} 个邮箱")
+        self.update_status(f"已导出 {len(accounts)} 个邮箱")
 
     def remove_selected(self) -> None:
         selected = set(self.selected_emails())
@@ -709,21 +882,24 @@ class MainWindow(QtWidgets.QMainWindow):
         self.update_status(f"已删除 {removed} 个邮箱")
 
     def mark_selected_used(self) -> None:
-        self.set_selected_usage(True)
+        self.set_selected_category(ACCOUNT_CATEGORY_PLUS)
 
     def mark_selected_unused(self) -> None:
-        self.set_selected_usage(False)
+        self.set_selected_category(ACCOUNT_CATEGORY_UNUSED)
 
     def set_selected_usage(self, used: bool) -> None:
+        self.set_selected_category(ACCOUNT_CATEGORY_PLUS if used else ACCOUNT_CATEGORY_UNUSED)
+
+    def set_selected_category(self, category: str) -> None:
         selected = set(self.selected_emails())
         if not selected:
             return
-        changed = self.account_store.set_used(selected, used)
+        changed = self.account_store.set_category(selected, category)
         for email in selected:
             self.account_states[email] = False
         self.refresh_accounts(reset_scroll=True)
-        target = "已使用" if used else "未使用"
-        self.update_status(f"已将 {changed} 个邮箱移动到{target}")
+        target = ACCOUNT_CATEGORY_LABELS.get(category, "未使用")
+        self.update_status(f"已将 {changed} 个邮箱移动到 {target}")
 
     def clear_accounts(self) -> None:
         if not self.account_store.accounts:
@@ -892,8 +1068,11 @@ def run_app() -> int:
     app = QtWidgets.QApplication([])
     app.setApplicationDisplayName(DISPLAY_NAME)
     app.setStyle("Fusion")
-    font = QtGui.QFont("Microsoft YaHei UI", 11)
-    font.setHintingPreference(QtGui.QFont.HintingPreference.PreferFullHinting)
+    icon_path = Path(__file__).resolve().parent.parent / "assets" / "mail.ico"
+    if icon_path.exists():
+        app.setWindowIcon(QtGui.QIcon(str(icon_path)))
+    font = QtGui.QFont("Microsoft YaHei", 10)
+    font.setHintingPreference(QtGui.QFont.HintingPreference.PreferVerticalHinting)
     font.setStyleStrategy(
         QtGui.QFont.StyleStrategy.PreferAntialias | QtGui.QFont.StyleStrategy.PreferQuality
     )

@@ -5,8 +5,38 @@ from datetime import datetime
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
 
-from .constants import CODE_PATTERNS, EMAIL_RE
+from .constants import (
+    ACCOUNT_CATEGORY_BANNED,
+    ACCOUNT_CATEGORY_FREE,
+    ACCOUNT_CATEGORY_PLUS,
+    ACCOUNT_CATEGORY_UNUSED,
+    CODE_PATTERNS,
+    EMAIL_RE,
+)
 from .models import ImportRecord
+
+
+def normalize_account_category(value: str | None) -> str:
+    text = (value or "").strip().lower()
+    if text in {"plus", "p", "已plus", "标记plus"}:
+        return ACCOUNT_CATEGORY_PLUS
+    if text in {"free", "f", "已free", "标记free"}:
+        return ACCOUNT_CATEGORY_FREE
+    if text in {"banned", "ban", "blocked", "封禁", "已封禁", "被封禁", "标记封禁"}:
+        return ACCOUNT_CATEGORY_BANNED
+    if text in {"unused", "未使用", "未标记", "none", ""}:
+        return ACCOUNT_CATEGORY_UNUSED
+    return ACCOUNT_CATEGORY_UNUSED
+
+
+def is_ignored_import_line(line: str) -> bool:
+    text = line.strip()
+    if not text:
+        return True
+    if text.startswith("#"):
+        return True
+    stripped = text.strip("=-_ *\t")
+    return not stripped
 
 
 def parse_import_text(text: str) -> tuple[list[ImportRecord], int]:
@@ -15,7 +45,7 @@ def parse_import_text(text: str) -> tuple[list[ImportRecord], int]:
     seen: set[str] = set()
     for raw in text.splitlines():
         line = raw.strip().strip("\ufeff").rstrip(",;")
-        if not line:
+        if is_ignored_import_line(line):
             continue
         parts = [part.strip() for part in line.split("----")]
         if not parts or not EMAIL_RE.match(parts[0]):
@@ -31,6 +61,7 @@ def parse_import_text(text: str) -> tuple[list[ImportRecord], int]:
                 password=parts[1] if len(parts) > 1 else "",
                 client_id=parts[2] if len(parts) > 2 else "",
                 refresh_token=parts[3] if len(parts) > 3 else "",
+                category=normalize_account_category(parts[4] if len(parts) > 4 else ""),
             )
         )
     return records, invalid

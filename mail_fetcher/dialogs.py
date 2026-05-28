@@ -27,14 +27,14 @@ class ImportDialog(QtWidgets.QDialog):
         title.setObjectName("DialogTitle")
         layout.addWidget(title)
 
-        desc = QtWidgets.QLabel("每行格式：email----password----client_id----graph_refresh_token。四段都会加密保存在本机。")
+        desc = QtWidgets.QLabel("每行格式：email----password----client_id----graph_refresh_token。导出文件会多一段分类：未使用 / Plus / Free / 已封禁。")
         desc.setObjectName("DialogText")
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
         self.editor = QtWidgets.QPlainTextEdit()
         self.editor.setObjectName("ImportEditor")
-        self.editor.setPlaceholderText("每行一个账号，四段用 ---- 分隔")
+        self.editor.setPlaceholderText("每行一个账号，四段或五段用 ---- 分隔")
         layout.addWidget(self.editor, 1)
 
         actions = QtWidgets.QHBoxLayout()
@@ -100,6 +100,8 @@ class MailDetailDialog(QtWidgets.QDialog):
         self.viewer.setObjectName("DetailViewer")
         self.viewer.setReadOnly(True)
         self.viewer.setPlainText(row.get("preview") or "")
+        self.viewer.moveCursor(QtGui.QTextCursor.MoveOperation.Start)
+        self.viewer.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         layout.addWidget(self.viewer, 1)
 
         actions = QtWidgets.QHBoxLayout()

@@ -5,7 +5,13 @@ import threading
 from dataclasses import asdict
 from datetime import datetime, timezone
 
+from .constants import (
+    ACCOUNT_CATEGORY_LABELS,
+    ACCOUNT_CATEGORY_PLUS,
+    ACCOUNT_CATEGORY_UNUSED,
+)
 from .models import AccountRecord, ImportRecord
+from .parsing import normalize_account_category
 from .security import EncryptedTextFile, app_data_dir
 
 
@@ -39,6 +45,9 @@ class AccountStore:
             pass
 
     def _normalize(self, item: dict) -> dict:
+        category = normalize_account_category(item.get("category", ""))
+        if category == ACCOUNT_CATEGORY_UNUSED and bool(item.get("used", False)):
+            category = ACCOUNT_CATEGORY_PLUS
         return {
             "email": item.get("email", ""),
             "password": item.get("password", ""),
@@ -48,6 +57,7 @@ class AccountStore:
             "last_fetch_at": item.get("last_fetch_at", ""),
             "last_status": item.get("last_status", "未取件"),
             "used": bool(item.get("used", False)),
+            "category": category,
         }
 
     def save(self) -> None:
@@ -64,6 +74,7 @@ class AccountStore:
                 if existing.get(record.email.lower()):
                     skipped += 1
                     continue
+                category = normalize_account_category(record.category)
                 account = AccountRecord(
                     email=record.email,
                     password=record.password,
@@ -71,6 +82,8 @@ class AccountStore:
                     refresh_token=record.refresh_token,
                     imported_at=now,
                     last_status="已导入" if record.refresh_token else "未取件",
+                    used=category != ACCOUNT_CATEGORY_UNUSED,
+                    category=category,
                 )
                 self.accounts.append(account)
                 existing[account.email.lower()] = account
@@ -104,15 +117,25 @@ class AccountStore:
                 self.save()
 
     def set_used(self, emails: set[str], used: bool) -> int:
+        return self.set_category(emails, ACCOUNT_CATEGORY_PLUS if used else ACCOUNT_CATEGORY_UNUSED)
+
+    def set_category(self, emails: set[str], category: str) -> int:
+        normalized = normalize_account_category(category)
         with self.lock:
             changed = 0
             for account in self.accounts:
-                if account.email in emails and account.used != used:
-                    account.used = used
+                if account.email in emails and account.category != normalized:
+                    account.category = normalized
+                    account.used = normalized != ACCOUNT_CATEGORY_UNUSED
                     changed += 1
             if changed:
                 self.save()
             return changed
+
+    @staticmethod
+    def category_label(category: str) -> str:
+        normalized = normalize_account_category(category)
+        return ACCOUNT_CATEGORY_LABELS.get(normalized, ACCOUNT_CATEGORY_LABELS[ACCOUNT_CATEGORY_UNUSED])
 
     def remove(self, emails: set[str]) -> int:
         with self.lock:
@@ -138,6 +161,7 @@ class ConfigStore:
         self.protocol = "Graph"
         self.auto_fetch_after_import = True
         self.concise_mode = False
+        self.theme = "light"
         self.load()
 
     def load(self) -> None:
@@ -151,6 +175,7 @@ class ConfigStore:
             self.protocol = "Graph"
             self.auto_fetch_after_import = bool(data.get("auto_fetch_after_import", True))
             self.concise_mode = bool(data.get("concise_mode", False))
+            self.theme = "dark" if data.get("theme") == "dark" else "light"
         except Exception:
             self.protocol = "Graph"
 
@@ -162,5 +187,6 @@ class ConfigStore:
             "protocol": self.protocol,
             "auto_fetch_after_import": self.auto_fetch_after_import,
             "concise_mode": self.concise_mode,
+            "theme": self.theme,
         }
         self.path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
