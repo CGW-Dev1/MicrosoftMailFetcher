@@ -15,11 +15,11 @@ from .constants import (
     DISPLAY_NAME,
     EXPORT_TOP_OPTIONS,
 )
-from .dialogs import ImportDialog, MailDetailDialog
-from .models import AccountRecord, ImportRecord
-from .parsing import compact_text
+from .dialogs import ImportDialog, MailDetailDialog, PhoneCodeWorker, PhoneDialog
+from .models import AccountRecord, ImportRecord, PhoneImportRecord
+from .parsing import clean_verification_code, compact_text
 from .services import MailService
-from .storage import AccountStore, ConfigStore
+from .storage import AccountStore, ConfigStore, PhoneStore
 from .widgets import AccountCard, BadgeLabel, CheckBox, CountSelector, MailCard, SearchField, pill_button
 from .workers import FetchWorker
 
@@ -91,7 +91,7 @@ def app_stylesheet(theme: str = "light") -> str:
     return f"""
     QWidget {{
         color: {text};
-        font-family: "Microsoft YaHei", "Microsoft YaHei UI", "Segoe UI";
+        font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI";
         font-size: 14px;
     }}
     QLabel {{
@@ -125,29 +125,29 @@ def app_stylesheet(theme: str = "light") -> str:
         background: {surface_soft};
     }}
     QFrame#AccountCard {{
-        min-height: 46px;
+        min-height: 54px;
     }}
     QFrame#MailCard {{
-        min-height: 96px;
+        min-height: 116px;
     }}
     QLabel#HeroTitle {{
         font-size: 23px;
-        font-weight: 700;
+        font-weight: 600;
         color: {text};
     }}
     QLabel#HeroSubTitle {{
         font-size: 14px;
-        font-weight: 600;
+        font-weight: 500;
         color: {muted};
     }}
     QLabel#SectionTitle {{
         font-size: 18px;
-        font-weight: 700;
+        font-weight: 600;
         color: {text};
     }}
     QLabel#AccountEmail {{
-        font-size: 12px;
-        font-weight: 600;
+        font-size: 13px;
+        font-weight: 500;
         color: {text};
     }}
     QLabel#AccountMeta, QLabel#MailMeta, QLabel#DialogText {{
@@ -156,48 +156,48 @@ def app_stylesheet(theme: str = "light") -> str:
     }}
     QLabel#MailSender {{
         font-size: 13px;
-        font-weight: 700;
+        font-weight: 600;
         color: {text};
     }}
     QLabel#MailSubject {{
         font-size: 15px;
-        font-weight: 700;
+        font-weight: 600;
         color: {text};
     }}
     QLabel#MailPreview {{
         color: {muted};
         font-size: 12px;
-        font-weight: 500;
+        font-weight: 400;
     }}
     QLabel#ProgressText {{
         color: {muted};
         font-size: 12px;
-        font-weight: 600;
+        font-weight: 500;
     }}
     QLabel#DialogTitle {{
         font-size: 24px;
-        font-weight: 700;
+        font-weight: 600;
         color: {text};
     }}
     QLabel#StatusLabel {{
-        background: {green_soft};
-        border: 1px solid transparent;
+        background: {blue_soft};
+        border: 1px solid {border};
         border-radius: 14px;
-        color: {green};
-        font-weight: 700;
-        padding: 10px 14px;
+        color: {blue};
+        font-weight: 600;
+        padding: 9px 14px;
     }}
     QLabel#SidebarCount {{
         background: {blue_soft};
         color: {blue};
         border-radius: 12px;
         padding: 6px 12px;
-        font-weight: 700;
+        font-weight: 600;
     }}
     QLabel#BadgeLabel {{
         border-radius: 12px;
-        padding: 4px 10px;
-        font-weight: 700;
+        padding: 2px 10px;
+        font-weight: 600;
         min-width: 74px;
     }}
     QLabel#BadgeLabel[tone="green"] {{
@@ -229,10 +229,28 @@ def app_stylesheet(theme: str = "light") -> str:
     QLineEdit#SearchField:focus, QPlainTextEdit#ImportEditor:focus, QTextEdit#DetailViewer:focus, QComboBox#CountCombo:focus {{
         border: 1px solid {blue};
     }}
+    QTableWidget {{
+        background: {surface};
+        color: {text};
+        border: 1px solid {border};
+        border-radius: 12px;
+        gridline-color: {border};
+        alternate-background-color: {surface_soft};
+        selection-background-color: {input_selection};
+        selection-color: {text};
+    }}
+    QHeaderView::section {{
+        background: {tab_bg};
+        color: {text};
+        border: none;
+        border-right: 1px solid {border};
+        padding: 8px 10px;
+        font-weight: 600;
+    }}
     QComboBox#CountCombo {{
         padding-right: 32px;
         min-height: 24px;
-        font-weight: 700;
+        font-weight: 600;
     }}
     QComboBox#CountCombo::drop-down {{
         subcontrol-origin: padding;
@@ -247,8 +265,8 @@ def app_stylesheet(theme: str = "light") -> str:
     }}
     QPushButton {{
         border-radius: 12px;
-        padding: 7px 12px;
-        font-weight: 700;
+        padding: 8px 14px;
+        font-weight: 600;
         border: 1px solid transparent;
     }}
     QPushButton[role="primary"] {{
@@ -282,7 +300,13 @@ def app_stylesheet(theme: str = "light") -> str:
         background: {surface};
         color: {blue};
         border: 1px solid {border};
-        padding: 5px 8px;
+        padding: 8px 10px;
+    }}
+    QPushButton[compact="true"] {{
+        padding: 3px 8px;
+        border-radius: 11px;
+        font-size: 13px;
+        min-height: 0;
     }}
     QPushButton[role="dropdown-value"] {{
         background: transparent;
@@ -290,7 +314,7 @@ def app_stylesheet(theme: str = "light") -> str:
         border: none;
         border-radius: 0;
         padding: 0;
-        font-weight: 700;
+        font-weight: 600;
         text-align: left;
     }}
     QToolButton[role="dropdown-arrow"] {{
@@ -384,11 +408,13 @@ class MainWindow(QtWidgets.QMainWindow):
             self.setWindowIcon(QtGui.QIcon(str(icon_path)))
 
         self.account_store = AccountStore()
+        self.phone_store = PhoneStore(self.account_store)
         self.config_store = ConfigStore()
         self.setStyleSheet(app_stylesheet(self.config_store.theme))
         self.mail_service = MailService(self.config_store, self.account_store)
 
         self.fetch_worker: FetchWorker | None = None
+        self.phone_code_workers: dict[str, PhoneCodeWorker] = {}
         self.fetch_running = False
         self.account_states: dict[str, bool] = {account.email: True for account in self.account_store.accounts}
         self.mail_rows: list[dict] = []
@@ -406,14 +432,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(root)
 
         outer = QtWidgets.QVBoxLayout(root)
-        outer.setContentsMargins(14, 10, 14, 10)
-        outer.setSpacing(10)
+        outer.setContentsMargins(16, 12, 16, 12)
+        outer.setSpacing(12)
 
         header = self.make_header(icon_path)
         outer.addWidget(header)
 
         body = QtWidgets.QHBoxLayout()
-        body.setSpacing(12)
+        body.setSpacing(14)
         outer.addLayout(body, 1)
 
         self.sidebar = self.make_sidebar()
@@ -462,21 +488,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.status_label = QtWidgets.QLabel("就绪")
         self.status_label.setObjectName("StatusLabel")
-        self.status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self.status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.status_label.setWordWrap(True)
-        self.status_label.setMinimumWidth(340)
-        self.status_label.setMinimumHeight(38)
+        self.status_label.setMinimumHeight(40)
+        self.status_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         layout.addWidget(self.status_label, 0, QtCore.Qt.AlignmentFlag.AlignTop)
         return frame
 
     def make_sidebar(self) -> QtWidgets.QFrame:
         frame = QtWidgets.QFrame()
         frame.setObjectName("SidebarCard")
-        frame.setFixedWidth(430)
+        frame.setFixedWidth(520)
 
         layout = QtWidgets.QVBoxLayout(frame)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(5)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
 
         top = QtWidgets.QHBoxLayout()
         title = QtWidgets.QLabel("邮箱列表")
@@ -494,7 +520,7 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.account_search)
 
         group_line = QtWidgets.QHBoxLayout()
-        group_line.setSpacing(6)
+        group_line.setSpacing(8)
         self.unused_button = pill_button("未使用", role="tab", checkable=True)
         self.plus_button = pill_button("Plus", role="tab", checkable=True)
         self.free_button = pill_button("Free", role="tab", checkable=True)
@@ -505,13 +531,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.free_button.clicked.connect(lambda: self.set_account_group(ACCOUNT_CATEGORY_FREE))
         self.banned_button.clicked.connect(lambda: self.set_account_group(ACCOUNT_CATEGORY_BANNED))
         for button in (self.unused_button, self.plus_button, self.free_button, self.banned_button):
-            button.setFixedHeight(36)
+            button.setFixedHeight(38)
             button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
             group_line.addWidget(button)
         layout.addLayout(group_line)
 
         import_export_line = QtWidgets.QHBoxLayout()
-        import_export_line.setSpacing(6)
+        import_export_line.setSpacing(8)
         import_button = pill_button("批量导入邮箱", role="primary")
         import_button.clicked.connect(self.open_import_dialog)
         import_button.setFixedHeight(38)
@@ -522,22 +548,27 @@ class MainWindow(QtWidgets.QMainWindow):
         import_export_line.addWidget(export_button, 1)
         layout.addLayout(import_export_line)
 
+        phone_button = pill_button("手机号管理", role="accent")
+        phone_button.clicked.connect(self.open_phone_dialog)
+        phone_button.setFixedHeight(38)
+        layout.addWidget(phone_button)
+
         select_line = QtWidgets.QHBoxLayout()
-        select_line.setSpacing(6)
+        select_line.setSpacing(8)
         self.select_all_box = CheckBox("全选")
-        self.select_all_box.setFixedHeight(30)
+        self.select_all_box.setFixedHeight(38)
         self.select_all_box.setChecked(True)
         self.select_all_box.toggled.connect(self.toggle_all_accounts)
         select_line.addWidget(self.select_all_box)
         select_line.addStretch(1)
         delete_button = pill_button("删除选中", role="danger")
         delete_button.clicked.connect(self.remove_selected)
-        delete_button.setFixedHeight(34)
+        delete_button.setFixedHeight(38)
         select_line.addWidget(delete_button)
         layout.addLayout(select_line)
 
         usage_line = QtWidgets.QHBoxLayout()
-        usage_line.setSpacing(6)
+        usage_line.setSpacing(8)
         mark_plus_button = pill_button("Plus", role="accent")
         mark_plus_button.setToolTip("标记选中邮箱为 Plus")
         mark_plus_button.clicked.connect(lambda: self.set_selected_category(ACCOUNT_CATEGORY_PLUS))
@@ -551,7 +582,7 @@ class MainWindow(QtWidgets.QMainWindow):
         unmark_button.setToolTip("将选中邮箱移回未使用")
         unmark_button.clicked.connect(lambda: self.set_selected_category(ACCOUNT_CATEGORY_UNUSED))
         for button in (mark_plus_button, mark_free_button, mark_banned_button, unmark_button):
-            button.setFixedHeight(36)
+            button.setFixedHeight(38)
             button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
             usage_line.addWidget(button)
         layout.addLayout(usage_line)
@@ -564,14 +595,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.account_container = QtWidgets.QWidget()
         self.account_container.setObjectName("AccountContainer")
         self.account_layout = QtWidgets.QVBoxLayout(self.account_container)
-        self.account_layout.setContentsMargins(0, 0, 0, 0)
-        self.account_layout.setSpacing(4)
+        self.account_layout.setContentsMargins(0, 0, 12, 0)
+        self.account_layout.setSpacing(6)
         self.account_layout.addStretch(1)
         self.account_scroll.setWidget(self.account_container)
         layout.addWidget(self.account_scroll, 1)
 
         footer = QtWidgets.QHBoxLayout()
         clear_button = pill_button("清空全部", role="secondary")
+        clear_button.setFixedHeight(38)
         clear_button.clicked.connect(self.clear_accounts)
         footer.addWidget(clear_button)
         footer.addStretch(1)
@@ -664,9 +696,11 @@ class MainWindow(QtWidgets.QMainWindow):
         header.addStretch(1)
         self.graph_badge = BadgeLabel("Graph: 0", tone="green")
         self.imap_badge = BadgeLabel("IMAP: 0", tone="cyan")
+        self.sms_badge = BadgeLabel("SMS: 0", tone="blue")
         self.total_badge = BadgeLabel("共 0 封", tone="blue")
         header.addWidget(self.graph_badge)
         header.addWidget(self.imap_badge)
+        header.addWidget(self.sms_badge)
         header.addWidget(self.total_badge)
         layout.addLayout(header)
 
@@ -697,6 +731,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def update_status(self, text: str) -> None:
         self.status_label.setText(text)
+        width = self.status_label.fontMetrics().horizontalAdvance(text) + 42
+        self.status_label.setFixedWidth(max(120, min(width, 520)))
 
     def save_config(self) -> None:
         try:
@@ -795,6 +831,8 @@ class MainWindow(QtWidgets.QMainWindow):
         card = AccountCard(account, checked)
         card.selection_changed.connect(self.on_account_checked)
         card.copy_requested.connect(self.copy_email)
+        card.mail_code_requested.connect(self.fetch_account_mail_code)
+        card.phone_code_requested.connect(self.fetch_account_phone_code)
         return card
 
     def toggle_all_accounts(self, checked: bool) -> None:
@@ -814,21 +852,111 @@ class MainWindow(QtWidgets.QMainWindow):
         QtWidgets.QApplication.clipboard().setText(email_address)
         self.update_status(f"已复制邮箱：{email_address}")
 
+    def fetch_account_mail_code(self, email_address: str) -> None:
+        if self.fetch_running:
+            self.update_status("正在取件，请稍后")
+            return
+        account = self.account_store.get(email_address)
+        if not account:
+            self.update_status("邮箱不存在")
+            return
+        self.update_status(f"正在获取邮箱验证码：{email_address}")
+        self.fetch_accounts([email_address])
+
     def open_import_dialog(self) -> None:
         dialog = ImportDialog(self)
         dialog.setStyleSheet(self.styleSheet())
         dialog.import_requested.connect(self.handle_import)
         dialog.exec()
 
+    def open_phone_dialog(self) -> None:
+        dialog = PhoneDialog(self.phone_store, self.selected_emails(), self)
+        dialog.setStyleSheet(self.styleSheet())
+        dialog.changed.connect(lambda: self.refresh_accounts())
+        dialog.sms_result_ready.connect(self.add_sms_result)
+        dialog.exec()
+
+    def add_sms_result(self, row: object) -> None:
+        data = dict(row)
+        data["code"] = clean_verification_code(data.get("code", ""))
+        if data.get("protocol") == "SMS" and data.get("code"):
+            data["subject"] = data["code"]
+        self.mail_rows = [data]
+        self.render_results(reset_scroll=True)
+        code = data.get("code") or "未识别"
+        self.update_status(f"手机号验证码：{code}")
+
+    def fetch_account_phone_code(self, email_address: str) -> None:
+        account = self.account_store.get(email_address)
+        if not account or not account.phone:
+            self.update_status("该邮箱未绑定手机号")
+            return
+        phone = self.phone_store.get(account.phone)
+        if not phone:
+            self.update_status("绑定的手机号不存在，请在手机号管理中重新绑定")
+            return
+        if phone.phone in self.phone_code_workers and self.phone_code_workers[phone.phone].isRunning():
+            self.update_status(f"正在获取 {phone.phone} 的验证码")
+            return
+        self.mail_rows.clear()
+        self.render_results(reset_scroll=True)
+        self.update_status(f"正在获取手机号验证码：{phone.phone}")
+        self.progress_text.setText(f"正在获取 {compact_text(email_address, 36)} 绑定手机号的验证码...")
+        worker = PhoneCodeWorker(phone)
+        self.phone_code_workers[phone.phone] = worker
+        worker.result_ready.connect(lambda row, email=email_address, number=phone.phone: self.on_account_phone_code_result(email, number, row))
+        worker.error_ready.connect(lambda error, number=phone.phone: self.on_account_phone_code_error(number, error))
+        worker.finished.connect(lambda number=phone.phone: self.phone_code_workers.pop(number, None))
+        worker.start()
+
+    def on_account_phone_code_result(self, email_address: str, phone_number: str, row: object) -> None:
+        data = dict(row)
+        data["account"] = email_address
+        data["phone"] = phone_number
+        code = clean_verification_code(data.get("code", ""))
+        data["code"] = code
+        if code:
+            data["subject"] = code
+        self.phone_store.mark_fetch_result(
+            phone_number,
+            "成功" if code else "未识别验证码",
+            code=code,
+            message=data.get("preview", ""),
+        )
+        self.add_sms_result(data)
+        self.progress_text.setText(f"{compact_text(email_address, 36)} 手机验证码：{code or '未识别'}")
+        self.refresh_accounts()
+
+    def on_account_phone_code_error(self, phone_number: str, error: str) -> None:
+        self.phone_store.mark_fetch_result(phone_number, "获取失败", message=error)
+        self.update_status(f"手机号验证码获取失败：{error[:120]}")
+        self.progress_text.setText("手机号验证码获取失败")
+        self.refresh_accounts()
+
     def handle_import(self, records: list[ImportRecord], invalid: int) -> None:
         added, updated, skipped = self.account_store.upsert_records(records)
+        phone_records: list[PhoneImportRecord] = []
+        phone_only_bindings: list[tuple[str, str]] = []
         for record in records:
             self.account_states.setdefault(record.email, True)
+            if record.phone and record.phone_api_url:
+                phone_records.append(PhoneImportRecord(record.phone, record.phone_api_url, [record.email]))
+            elif record.phone:
+                phone_only_bindings.append((record.phone, record.email))
+        phone_added = phone_updated = phone_bound = 0
+        if phone_records:
+            phone_added, phone_updated, _phone_skipped = self.phone_store.upsert_records(phone_records)
+        for phone_number, email in phone_only_bindings:
+            if self.phone_store.get(phone_number):
+                bound, _rejected = self.phone_store.bind_emails(phone_number, {email})
+                phone_bound += bound
         imported_groups = [record.category for record in records if record.category in ACCOUNT_CATEGORY_LABELS]
         target_group = next((group for group in imported_groups if group != ACCOUNT_CATEGORY_UNUSED), ACCOUNT_CATEGORY_UNUSED)
         self.set_account_group(target_group)
         self.refresh_accounts(reset_scroll=True)
-        self.update_status(f"导入完成：新增 {added}，重复 {skipped}")
+        phone_total = phone_added + phone_updated + phone_bound
+        phone_text = f"，手机号 {phone_total}" if phone_total else ""
+        self.update_status(f"导入完成：新增 {added}，重复 {skipped}{phone_text}")
         if invalid:
             self.logs.append(f"跳过 {invalid} 行无效邮箱。")
         if self.auto_fetch_box.isChecked():
@@ -856,18 +984,23 @@ class MainWindow(QtWidgets.QMainWindow):
                 lines.append(f"# ===== {label} =====")
                 current_category = account.category
             lines.append(
-                "----".join(
-                    [
-                        account.email,
-                        account.password,
-                        account.client_id,
-                        account.refresh_token,
-                        label,
-                    ]
-                )
+                "----".join(self.export_account_parts(account, label))
             )
         Path(path).write_text("\n".join(lines), encoding="utf-8")
         self.update_status(f"已导出 {len(accounts)} 个邮箱")
+
+    def export_account_parts(self, account: AccountRecord, label: str) -> list[str]:
+        parts = [
+            account.email,
+            account.password,
+            account.client_id,
+            account.refresh_token,
+            label,
+        ]
+        if account.phone:
+            phone = self.phone_store.get(account.phone)
+            parts.extend([account.phone, phone.api_url if phone else ""])
+        return parts
 
     def remove_selected(self) -> None:
         selected = set(self.selected_emails())
@@ -875,6 +1008,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         if QtWidgets.QMessageBox.question(self, "删除选中", f"确定删除选中的 {len(selected)} 个邮箱吗？") != QtWidgets.QMessageBox.StandardButton.Yes:
             return
+        self.phone_store.remove_emails(selected)
         removed = self.account_store.remove(selected)
         for email in selected:
             self.account_states.pop(email, None)
@@ -906,6 +1040,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         if QtWidgets.QMessageBox.question(self, "清空全部", "确定清空全部邮箱吗？") != QtWidgets.QMessageBox.StandardButton.Yes:
             return
+        self.phone_store.clear_bindings()
         total = self.account_store.clear()
         self.account_states.clear()
         self.refresh_accounts()
@@ -939,6 +1074,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.fetch_worker = FetchWorker(
             self.mail_service,
             self.account_store,
+            self.phone_store,
             accounts,
             self.protocol,
             top,
@@ -961,7 +1097,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_progress(self, done: int, total: int, account: str, messages: int) -> None:
         self.progress_bar.setRange(0, max(total, 1))
         self.progress_bar.setValue(done)
-        self.progress_text.setText(f"[{done}/{total}] {compact_text(account, 44)}，已取 {messages} 封")
+        self.progress_text.setText(f"[{done}/{total}] {compact_text(account, 44)}，已取 {messages} 条")
 
     def on_result_chunk(self, rows: object) -> None:
         self.mail_rows.extend(list(rows))
@@ -971,11 +1107,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.fetch_running = False
         self.update_fetch_buttons()
         if stopped:
-            self.update_status(f"已停止 | 已完成 {success}/{total_accounts} | {total_messages} 封")
+            self.update_status(f"已停止 | 已完成 {success}/{total_accounts} | {total_messages} 条")
             self.progress_text.setText("已停止")
         else:
-            self.update_status(f"完成 {success}/{total_accounts} | {total_messages} 封邮件")
-            self.progress_text.setText(f"完成：{success}/{total_accounts} 个账号，{total_messages} 封邮件")
+            self.update_status(f"完成 {success}/{total_accounts} | {total_messages} 条")
+            self.progress_text.setText(f"完成：{success}/{total_accounts} 个任务，{total_messages} 条")
         self.render_results(reset_scroll=True)
         self.fetch_worker = None
 
@@ -1003,9 +1139,11 @@ class MainWindow(QtWidgets.QMainWindow):
         rows = self.filtered_results()
         graph_count = sum(1 for row in rows if row.get("protocol") == "GRAPH")
         imap_count = sum(1 for row in rows if row.get("protocol") == "IMAP")
-        self.total_badge.setText(f"共 {len(rows)} 封")
+        sms_count = sum(1 for row in rows if row.get("protocol") == "SMS")
+        self.total_badge.setText(f"共 {len(rows)} 条")
         self.graph_badge.setText(f"Graph: {graph_count}")
         self.imap_badge.setText(f"IMAP: {imap_count}")
+        self.sms_badge.setText(f"SMS: {sms_count}")
 
     def render_results(self, reset_scroll: bool = False) -> None:
         rows = self.filtered_results()
@@ -1018,7 +1156,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def build_mail_card(self, row: dict) -> QtWidgets.QWidget:
         card = MailCard(row)
         card.open_requested.connect(self.open_mail_detail)
+        card.copy_code_requested.connect(self.copy_code)
         return card
+
+    def copy_code(self, code: str) -> None:
+        if not code:
+            return
+        QtWidgets.QApplication.clipboard().setText(code)
+        self.update_status(f"已复制验证码：{code}")
 
     def open_mail_detail(self, row: dict) -> None:
         dialog = MailDetailDialog(row, self)
@@ -1038,7 +1183,7 @@ class MainWindow(QtWidgets.QMainWindow):
         with open(path, "w", newline="", encoding="utf-8-sig") as handle:
             writer = csv.DictWriter(
                 handle,
-                fieldnames=["account", "protocol", "time", "sender", "subject", "code", "read", "preview", "webLink", "concise"],
+                fieldnames=["account", "phone", "protocol", "time", "sender", "subject", "code", "read", "preview", "webLink", "concise"],
                 extrasaction="ignore",
             )
             writer.writeheader()
@@ -1071,10 +1216,12 @@ def run_app() -> int:
     icon_path = Path(__file__).resolve().parent.parent / "assets" / "mail.ico"
     if icon_path.exists():
         app.setWindowIcon(QtGui.QIcon(str(icon_path)))
-    font = QtGui.QFont("Microsoft YaHei", 10)
-    font.setHintingPreference(QtGui.QFont.HintingPreference.PreferVerticalHinting)
+    font = QtGui.QFont("Microsoft YaHei UI", 10)
+    font.setHintingPreference(QtGui.QFont.HintingPreference.PreferNoHinting)
     font.setStyleStrategy(
-        QtGui.QFont.StyleStrategy.PreferAntialias | QtGui.QFont.StyleStrategy.PreferQuality
+        QtGui.QFont.StyleStrategy.PreferAntialias
+        | QtGui.QFont.StyleStrategy.PreferQuality
+        | QtGui.QFont.StyleStrategy.ForceOutline
     )
     app.setFont(font)
     window = MainWindow()

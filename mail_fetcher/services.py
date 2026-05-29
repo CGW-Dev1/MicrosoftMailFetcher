@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import imaplib
+import re
 import threading
 from urllib.parse import urlencode
 
@@ -16,8 +17,8 @@ from .constants import (
     IMAP_HOST,
     IMAP_REFRESH_SCOPE_OPTIONS,
 )
-from .models import AccountRecord
-from .parsing import extract_verification_code, fmt_dt, parse_imap_message
+from .models import AccountRecord, PhoneRecord
+from .parsing import clean_verification_code, compact_text, extract_verification_code, fmt_dt, parse_imap_message
 from .security import EncryptedTextFile, app_data_dir
 from .storage import AccountStore, ConfigStore
 
@@ -170,12 +171,119 @@ class ImapMailClient:
             return rows
 
 
+class SmsService:
+    def fetch_phone_row(self, phone: PhoneRecord, concise_mode: bool = True) -> dict:
+        response = http_session().get(phone.api_url, timeout=HTTP_TIMEOUT)
+        text = response.text or ""
+        if response.status_code >= 400:
+            raise RuntimeError(f"短信 API 请求失败 HTTP {response.status_code}: {text[:300]}")
+        payload = self._json_payload(response)
+        searchable = self._searchable_text(payload, text, phone.phone)
+        api_code = self._api_code(payload)
+        if self._has_sms8_code_field(payload):
+            code = api_code
+        else:
+            code = api_code or clean_verification_code(extract_verification_code(searchable))
+        api_message = self._api_message(payload)
+        subject = code or "未识别"
+        preview_source = api_message or searchable
+        preview = "" if concise_mode and code else compact_text(preview_source, 900)
+        return {
+            "account": ", ".join(phone.emails) or phone.phone,
+            "protocol": "SMS",
+            "time": fmt_dt(response.headers.get("Date", "")),
+            "sender": phone.phone,
+            "subject": subject,
+            "read": "",
+            "preview": preview,
+            "webLink": "",
+            "code": code,
+            "concise": concise_mode,
+            "phone": phone.phone,
+        }
+
+    def _json_payload(self, response: requests.Response) -> object | None:
+        try:
+            return response.json()
+        except Exception:
+            return None
+
+    def _api_code(self, payload: object | None) -> str:
+        if not isinstance(payload, dict):
+            return ""
+        data = payload.get("data")
+        if isinstance(data, dict):
+            code = clean_verification_code(str(data.get("code") or "").strip())
+            if code:
+                return code
+        return clean_verification_code(str(payload.get("code_value") or payload.get("verify_code") or "").strip())
+
+    def _has_sms8_code_field(self, payload: object | None) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        data = payload.get("data")
+        return isinstance(data, dict) and "code" in data
+
+    def _api_message(self, payload: object | None) -> str:
+        if not isinstance(payload, dict):
+            return ""
+        data = payload.get("data")
+        parts: list[str] = []
+        if payload.get("msg"):
+            parts.append(str(payload.get("msg")))
+        if isinstance(data, dict):
+            for key in ("code_time", "expired_date", "message", "msg", "content"):
+                if data.get(key):
+                    parts.append(str(data.get(key)))
+        return " ".join(parts)
+
+    def _searchable_text(self, payload: object | None, fallback: str, phone_number: str = "") -> str:
+        if payload is None:
+            return self._prefer_phone_text([fallback], phone_number)
+        strings: list[str] = []
+        chunks: list[str] = []
+
+        def walk(value: object) -> None:
+            if isinstance(value, dict):
+                chunk_parts: list[str] = []
+                for key, item in value.items():
+                    chunk_parts.append(str(key))
+                    if not isinstance(item, (dict, list)) and item is not None:
+                        chunk_parts.append(str(item))
+                    walk(item)
+                if chunk_parts:
+                    chunks.append(" ".join(chunk_parts))
+            elif isinstance(value, list):
+                for item in value:
+                    walk(item)
+            elif value is not None:
+                strings.append(str(value))
+
+        walk(payload)
+        candidates = chunks or strings or [fallback]
+        return self._prefer_phone_text(candidates, phone_number)
+
+    def _prefer_phone_text(self, chunks: list[str], phone_number: str) -> str:
+        target = re.sub(r"\D+", "", phone_number)
+        suffixes = [target[-length:] for length in (11, 10, 8, 6) if len(target) >= length]
+        if target:
+            matched = [
+                chunk
+                for chunk in chunks
+                if any(suffix and suffix in re.sub(r"\D+", "", chunk) for suffix in suffixes)
+            ]
+            if matched:
+                return " ".join(matched)
+        return " ".join(chunks)
+
+
 class MailService:
     def __init__(self, config: ConfigStore, account_store: AccountStore) -> None:
         self.config = config
         self.account_store = account_store
         self.graph: GraphMailClient | None = None
         self.imap = ImapMailClient(config, account_store)
+        self.sms = SmsService()
 
     def ensure_graph(self) -> GraphMailClient:
         if self.graph is None:
@@ -193,15 +301,18 @@ class MailService:
         rows = [self.graph_row(account.email, message) for message in messages]
         return [self.concise_row(row) for row in rows] if concise_mode else rows
 
+    def fetch_phone_row(self, phone: PhoneRecord, concise_mode: bool = True) -> dict:
+        return self.sms.fetch_phone_row(phone, concise_mode)
+
     @staticmethod
     def concise_row(row: dict) -> dict:
-        code = extract_verification_code(row.get("subject", ""), row.get("preview", ""))
+        code = clean_verification_code(extract_verification_code(row.get("subject", ""), row.get("preview", "")))
         return {
             "account": row.get("account", ""),
             "protocol": row.get("protocol", ""),
             "time": row.get("time", ""),
             "sender": row.get("sender", ""),
-            "subject": f"验证码：{code}" if code else "未识别到验证码",
+            "subject": code if code else "未识别到验证码",
             "read": row.get("read", ""),
             "preview": "",
             "webLink": row.get("webLink", ""),

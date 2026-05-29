@@ -1,5 +1,5 @@
 # 邮件验证码助手
-当前版本：V1.2
+当前版本：V1.3
 
 本项目是一个本地 Windows 桌面工具，用于批量导入 Outlook/Hotmail 邮箱账号，并通过 Microsoft Graph 或 IMAP OAuth 获取最新邮件、提取验证码。
 

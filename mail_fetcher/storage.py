@@ -10,7 +10,7 @@ from .constants import (
     ACCOUNT_CATEGORY_PLUS,
     ACCOUNT_CATEGORY_UNUSED,
 )
-from .models import AccountRecord, ImportRecord
+from .models import AccountRecord, ImportRecord, PhoneImportRecord, PhoneRecord
 from .parsing import normalize_account_category
 from .security import EncryptedTextFile, app_data_dir
 
@@ -53,6 +53,7 @@ class AccountStore:
             "password": item.get("password", ""),
             "client_id": item.get("client_id", ""),
             "refresh_token": item.get("refresh_token", ""),
+            "phone": item.get("phone", ""),
             "imported_at": item.get("imported_at") or datetime.now(timezone.utc).isoformat(),
             "last_fetch_at": item.get("last_fetch_at", ""),
             "last_status": item.get("last_status", "未取件"),
@@ -80,6 +81,7 @@ class AccountStore:
                     password=record.password,
                     client_id=record.client_id,
                     refresh_token=record.refresh_token,
+                    phone="",
                     imported_at=now,
                     last_status="已导入" if record.refresh_token else "未取件",
                     used=category != ACCOUNT_CATEGORY_UNUSED,
@@ -150,6 +152,216 @@ class AccountStore:
             self.accounts = []
             self.save()
             return total
+
+
+class PhoneStore:
+    max_emails_per_phone = 3
+
+    def __init__(self, account_store: AccountStore) -> None:
+        self.account_store = account_store
+        self.path = app_data_dir() / "phones.sec"
+        self.secure_file = EncryptedTextFile(self.path)
+        self.lock = threading.RLock()
+        self.phones: list[PhoneRecord] = []
+        self.load()
+
+    def load(self) -> None:
+        try:
+            text = self.secure_file.read_text() if self.path.exists() else ""
+            if not text:
+                self.phones = []
+                return
+            data = json.loads(text)
+            self.phones = [PhoneRecord(**self._normalize(item)) for item in data.get("phones", [])]
+            self._sync_account_phone_fields(save_accounts=False)
+        except Exception:
+            self.phones = []
+            return
+
+    def _normalize(self, item: dict) -> dict:
+        emails = item.get("emails") or []
+        if isinstance(emails, str):
+            emails = [part.strip() for part in emails.replace("，", ",").replace(";", ",").split(",")]
+        clean_emails: list[str] = []
+        seen: set[str] = set()
+        for email in emails:
+            key = str(email).strip().lower()
+            if not key or key in seen:
+                continue
+            account = self.account_store.get(str(email).strip())
+            if account:
+                clean_emails.append(account.email)
+                seen.add(key)
+            if len(clean_emails) >= self.max_emails_per_phone:
+                break
+        return {
+            "phone": item.get("phone", ""),
+            "api_url": item.get("api_url", ""),
+            "emails": clean_emails,
+            "imported_at": item.get("imported_at") or datetime.now(timezone.utc).isoformat(),
+            "last_fetch_at": item.get("last_fetch_at", ""),
+            "last_status": item.get("last_status", "未取码"),
+            "last_code": item.get("last_code", ""),
+            "last_message": item.get("last_message", ""),
+        }
+
+    def save(self) -> None:
+        with self.lock:
+            data = {"phones": [asdict(phone) for phone in self.phones]}
+            self.secure_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+    def upsert_records(self, records: list[PhoneImportRecord]) -> tuple[int, int, int]:
+        with self.lock:
+            existing = {phone.phone: phone for phone in self.phones}
+            added = updated = skipped = 0
+            now = datetime.now(timezone.utc).isoformat()
+            for record in records:
+                phone = existing.get(record.phone)
+                if phone:
+                    if phone.api_url != record.api_url:
+                        phone.api_url = record.api_url
+                        updated += 1
+                    else:
+                        skipped += 1
+                    if record.emails:
+                        self.bind_emails(record.phone, set(record.emails), save=False)
+                    continue
+                phone = PhoneRecord(
+                    phone=record.phone,
+                    api_url=record.api_url,
+                    emails=[],
+                    imported_at=now,
+                    last_status="已导入",
+                )
+                self.phones.append(phone)
+                existing[phone.phone] = phone
+                added += 1
+                if record.emails:
+                    self.bind_emails(record.phone, set(record.emails), save=False)
+            self._sort()
+            self.save()
+            self.account_store.save()
+            return added, updated, skipped
+
+    def _sort(self) -> None:
+        self.phones.sort(key=lambda phone: phone.phone.lower())
+
+    def get(self, phone_number: str) -> PhoneRecord | None:
+        with self.lock:
+            for phone in self.phones:
+                if phone.phone == phone_number:
+                    return phone
+        return None
+
+    def phones_for_emails(self, emails: set[str]) -> list[PhoneRecord]:
+        email_keys = {email.lower() for email in emails}
+        with self.lock:
+            matched = [
+                phone
+                for phone in self.phones
+                if any(email.lower() in email_keys for email in phone.emails)
+            ]
+        return sorted(matched, key=lambda phone: phone.phone.lower())
+
+    def bind_emails(self, phone_number: str, emails: set[str], save: bool = True) -> tuple[int, list[str]]:
+        with self.lock:
+            phone = self.get(phone_number)
+            if not phone:
+                return 0, list(emails)
+            bound = 0
+            rejected: list[str] = []
+            for email in sorted(emails, key=str.lower):
+                account = self.account_store.get(email)
+                if not account:
+                    rejected.append(email)
+                    continue
+                if account.email in phone.emails:
+                    continue
+                if len(phone.emails) >= self.max_emails_per_phone:
+                    rejected.append(account.email)
+                    continue
+                self._remove_email_from_other_phones(account.email, except_phone=phone.phone)
+                phone.emails.append(account.email)
+                account.phone = phone.phone
+                bound += 1
+            phone.emails = sorted(phone.emails, key=str.lower)[: self.max_emails_per_phone]
+            if save and bound:
+                self.save()
+                self.account_store.save()
+            return bound, rejected
+
+    def unbind_emails(self, emails: set[str], save: bool = True) -> int:
+        with self.lock:
+            removed = 0
+            email_keys = {email.lower() for email in emails}
+            for phone in self.phones:
+                before = len(phone.emails)
+                phone.emails = [email for email in phone.emails if email.lower() not in email_keys]
+                removed += before - len(phone.emails)
+            for email in emails:
+                account = self.account_store.get(email)
+                if account:
+                    account.phone = ""
+            if save and removed:
+                self.save()
+                self.account_store.save()
+            return removed
+
+    def remove_emails(self, emails: set[str]) -> None:
+        self.unbind_emails(emails)
+
+    def remove(self, phone_number: str) -> bool:
+        with self.lock:
+            phone = self.get(phone_number)
+            if not phone:
+                return False
+            for email in phone.emails:
+                account = self.account_store.get(email)
+                if account:
+                    account.phone = ""
+            self.phones = [item for item in self.phones if item.phone != phone_number]
+            self.save()
+            self.account_store.save()
+            return True
+
+    def clear_bindings(self) -> None:
+        with self.lock:
+            for phone in self.phones:
+                phone.emails = []
+            for account in self.account_store.accounts:
+                account.phone = ""
+            self.save()
+            self.account_store.save()
+
+    def mark_fetch_result(self, phone_number: str, status: str, code: str = "", message: str = "", save: bool = True) -> None:
+        with self.lock:
+            phone = self.get(phone_number)
+            if not phone:
+                return
+            phone.last_status = status
+            phone.last_code = code
+            phone.last_message = message[:500]
+            phone.last_fetch_at = datetime.now(timezone.utc).isoformat()
+            if save:
+                self.save()
+
+    def _remove_email_from_other_phones(self, email: str, except_phone: str = "") -> None:
+        key = email.lower()
+        for phone in self.phones:
+            if phone.phone == except_phone:
+                continue
+            phone.emails = [item for item in phone.emails if item.lower() != key]
+
+    def _sync_account_phone_fields(self, save_accounts: bool = True) -> None:
+        for account in self.account_store.accounts:
+            account.phone = ""
+        for phone in self.phones:
+            for email in phone.emails:
+                account = self.account_store.get(email)
+                if account:
+                    account.phone = phone.phone
+        if save_accounts:
+            self.account_store.save()
 
 
 class ConfigStore:

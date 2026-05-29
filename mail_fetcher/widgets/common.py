@@ -161,4 +161,4 @@ class BadgeLabel(QtWidgets.QLabel):
         self.setObjectName("BadgeLabel")
         self.setProperty("tone", tone)
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.setMinimumHeight(28)
+        self.setFixedHeight(24)

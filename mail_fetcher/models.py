@@ -11,6 +11,7 @@ class AccountRecord:
     password: str = ""
     client_id: str = ""
     refresh_token: str = ""
+    phone: str = ""
     imported_at: str = ""
     last_fetch_at: str = ""
     last_status: str = "未取件"
@@ -33,3 +34,24 @@ class ImportRecord:
     client_id: str = ""
     refresh_token: str = ""
     category: str = ACCOUNT_CATEGORY_UNUSED
+    phone: str = ""
+    phone_api_url: str = ""
+
+
+@dataclass
+class PhoneRecord:
+    phone: str
+    api_url: str
+    emails: list[str]
+    imported_at: str = ""
+    last_fetch_at: str = ""
+    last_status: str = "未取码"
+    last_code: str = ""
+    last_message: str = ""
+
+
+@dataclass
+class PhoneImportRecord:
+    phone: str
+    api_url: str
+    emails: list[str]

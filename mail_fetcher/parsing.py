@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import email
+import re
 from datetime import datetime
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
@@ -13,7 +14,9 @@ from .constants import (
     CODE_PATTERNS,
     EMAIL_RE,
 )
-from .models import ImportRecord
+from .models import ImportRecord, PhoneImportRecord
+
+PHONE_RE = re.compile(r"^\+\d{6,18}$")
 
 
 def normalize_account_category(value: str | None) -> str:
@@ -55,15 +58,56 @@ def parse_import_text(text: str) -> tuple[list[ImportRecord], int]:
         if key in seen:
             continue
         seen.add(key)
+        category_index = 4
+        phone = ""
+        phone_api_url = ""
+        if len(parts) > 4 and PHONE_RE.match(parts[4]):
+            category = ACCOUNT_CATEGORY_UNUSED
+            phone = parts[4]
+            phone_api_url = parts[5] if len(parts) > 5 and parts[5].startswith(("http://", "https://")) else ""
+        else:
+            category = normalize_account_category(parts[category_index] if len(parts) > category_index else "")
+            phone = parts[5] if len(parts) > 5 and PHONE_RE.match(parts[5]) else ""
+            phone_api_url = parts[6] if len(parts) > 6 and parts[6].startswith(("http://", "https://")) else ""
         records.append(
             ImportRecord(
                 email=parts[0],
                 password=parts[1] if len(parts) > 1 else "",
                 client_id=parts[2] if len(parts) > 2 else "",
                 refresh_token=parts[3] if len(parts) > 3 else "",
-                category=normalize_account_category(parts[4] if len(parts) > 4 else ""),
+                category=category,
+                phone=phone,
+                phone_api_url=phone_api_url,
             )
         )
+    return records, invalid
+
+
+def parse_phone_import_text(text: str) -> tuple[list[PhoneImportRecord], int]:
+    records: list[PhoneImportRecord] = []
+    invalid = 0
+    seen: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.strip().strip("\ufeff").rstrip(",;")
+        if is_ignored_import_line(line):
+            continue
+        parts = [part.strip() for part in line.split("----")]
+        if len(parts) < 2 or not PHONE_RE.match(parts[0]) or not parts[1].startswith(("http://", "https://")):
+            invalid += 1
+            continue
+        key = parts[0]
+        if key in seen:
+            continue
+        seen.add(key)
+        emails: list[str] = []
+        if len(parts) > 2:
+            for email_text in re.split(r"[,;，\s]+", parts[2]):
+                email_text = email_text.strip()
+                if EMAIL_RE.match(email_text) and email_text.lower() not in {item.lower() for item in emails}:
+                    emails.append(email_text)
+                if len(emails) >= 3:
+                    break
+        records.append(PhoneImportRecord(phone=parts[0], api_url=parts[1], emails=emails))
     return records, invalid
 
 
@@ -123,11 +167,33 @@ def fmt_dt(value: str) -> str:
 
 def extract_verification_code(*parts: str) -> str:
     text = " ".join(part or "" for part in parts)
+    if "no verification code" in text.lower():
+        return ""
     for pattern in CODE_PATTERNS:
         match = pattern.search(text)
         if match:
-            return match.group(1).strip()
+            candidate = match.group(1).strip()
+            if is_probable_verification_code(candidate):
+                return candidate
     return ""
+
+
+def is_probable_verification_code(value: str) -> bool:
+    text = (value or "").strip()
+    if not re.fullmatch(r"[A-Z0-9]{4,10}", text, flags=re.IGNORECASE):
+        return False
+    if text.lower() in {"code", "data", "none", "null", "true", "false"}:
+        return False
+    return any(char.isdigit() for char in text)
+
+
+def clean_verification_code(value: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    if is_probable_verification_code(text):
+        return text
+    return extract_verification_code(text)
 
 
 def compact_text(value: str, limit: int) -> str:
