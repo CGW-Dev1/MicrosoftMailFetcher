@@ -8,7 +8,7 @@ from .models import ImportRecord, PhoneRecord
 from .parsing import parse_import_text, parse_phone_import_text
 from .services import SmsService
 from .storage import PhoneStore
-from .widgets.common import pill_button
+from .widgets.common import ElidedLabel, pill_button
 
 
 class ImportDialog(QtWidgets.QDialog):
@@ -145,11 +145,16 @@ class PhoneDialog(QtWidgets.QDialog):
         self,
         phone_store: PhoneStore,
         selected_emails: list[str],
+        available_emails: list[str] | None = None,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.phone_store = phone_store
-        self.selected_emails = selected_emails
+        self.available_emails = self.normalize_emails(available_emails or selected_emails)
+        self.selected_emails = self.normalize_emails(selected_emails)
+        if self.available_emails:
+            available_set = {email.lower() for email in self.available_emails}
+            self.selected_emails = [email for email in self.selected_emails if email.lower() in available_set]
         self.phone_worker: PhoneCodeWorker | None = None
         self.setWindowTitle("手机号管理")
         self.resize(960, 660)
@@ -177,7 +182,7 @@ class PhoneDialog(QtWidgets.QDialog):
         layout.addWidget(self.search)
 
         self.table = QtWidgets.QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["手机号", "邮箱数", "绑定邮箱", "状态"])
+        self.table.setHorizontalHeaderLabels(["手机号", "邮箱数", "已绑定邮箱", "状态"])
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -187,18 +192,19 @@ class PhoneDialog(QtWidgets.QDialog):
         self.table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self.table.verticalHeader().setDefaultSectionSize(42)
         self.table.setAlternatingRowColors(True)
-        layout.addWidget(self.table, 1)
+        self.table.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self.show_table_context_menu)
+        layout.addWidget(self.table, 3)
 
         self.editor = QtWidgets.QPlainTextEdit()
         self.editor.setObjectName("ImportEditor")
         self.editor.setPlaceholderText("+12633008723----https://api.sms8.net/api/record?token=xxx")
-        self.editor.setMaximumHeight(108)
+        self.editor.setMaximumHeight(72)
         layout.addWidget(self.editor)
 
-        selected_text = f"当前已勾选邮箱：{len(selected_emails)} 个"
-        if selected_emails:
-            selected_text += f"（{', '.join(selected_emails[:3])}{'...' if len(selected_emails) > 3 else ''}）"
+        selected_text = f"当前菜单邮箱：{len(self.available_emails)} 个。点击已绑定邮箱后的小三角，可绑定或解绑单个邮箱。"
         self.selected_label = QtWidgets.QLabel(selected_text)
         self.selected_label.setObjectName("DialogText")
         self.selected_label.setWordWrap(True)
@@ -211,29 +217,42 @@ class PhoneDialog(QtWidgets.QDialog):
         layout.addWidget(self.code_label)
 
         actions = QtWidgets.QHBoxLayout()
-        actions.setSpacing(8)
-        for text, slot, role in (
+        actions.setSpacing(10)
+        action_items = (
             ("从文件载入", self.load_file, "secondary"),
             ("导入手机号", self.import_phones, "primary"),
             ("获取验证码", self.fetch_selected_code, "primary"),
-            ("复制手机号", self.copy_selected_phone, "secondary"),
-            ("绑定选中邮箱", self.bind_selected_emails, "accent"),
-            ("解绑选中邮箱", self.unbind_selected_emails, "secondary"),
             ("导出手机号", self.export_phones, "secondary"),
+            ("清空当前绑定", self.clear_selected_phone_bindings, "secondary"),
             ("删除手机号", self.delete_selected_phone, "danger"),
-        ):
+        )
+        for text, slot, role in action_items:
             button = pill_button(text, role=role)
-            button.setFixedHeight(38)
+            button.setFixedHeight(40)
+            width = max(112, button.fontMetrics().horizontalAdvance(text) + 34)
+            button.setMinimumWidth(width)
+            button.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
             button.clicked.connect(slot)
-            actions.addWidget(button)
-        actions.addStretch(1)
-        close_button = pill_button("关闭", role="secondary")
-        close_button.setFixedHeight(38)
-        close_button.clicked.connect(self.accept)
-        actions.addWidget(close_button)
+            actions.addWidget(button, 1)
         layout.addLayout(actions)
 
         self.refresh_table()
+
+    @staticmethod
+    def normalize_emails(emails: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for email in emails:
+            clean = str(email).strip()
+            key = clean.lower()
+            if not clean or key in seen:
+                continue
+            normalized.append(clean)
+            seen.add(key)
+        return sorted(normalized, key=str.lower)
 
     def filtered_phones(self):
         needle = self.search.text().strip().lower()
@@ -255,7 +274,7 @@ class PhoneDialog(QtWidgets.QDialog):
             values = [
                 phone.phone,
                 f"{len(phone.emails)}/3",
-                ", ".join(phone.emails),
+                "",
                 phone.last_status,
             ]
             for col, value in enumerate(values):
@@ -263,8 +282,99 @@ class PhoneDialog(QtWidgets.QDialog):
                 item.setToolTip(phone.api_url if col == 0 else value)
                 item.setData(QtCore.Qt.ItemDataRole.UserRole, phone.phone)
                 self.table.setItem(row, col, item)
+            self.table.setCellWidget(row, 2, self.build_bound_email_cell(phone))
         if phones:
             self.table.selectRow(0)
+
+    def build_bound_email_cell(self, phone: PhoneRecord) -> QtWidgets.QWidget:
+        cell = QtWidgets.QWidget()
+        cell.setObjectName("BoundEmailCell")
+        layout = QtWidgets.QHBoxLayout(cell)
+        layout.setContentsMargins(8, 0, 4, 0)
+        layout.setSpacing(6)
+
+        text = ", ".join(phone.emails) if phone.emails else "未绑定"
+        label = ElidedLabel(text)
+        label.setObjectName("BoundEmailText")
+        label.setToolTip(text)
+        label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Preferred)
+        layout.addWidget(label, 1)
+
+        menu_button = QtWidgets.QToolButton()
+        menu_button.setObjectName("EmailMenuButton")
+        menu_button.setProperty("role", "email-menu")
+        menu_button.setArrowType(QtCore.Qt.ArrowType.DownArrow)
+        menu_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        menu_button.setToolTip("绑定或解绑邮箱")
+        menu_button.setFixedSize(28, 28)
+        menu_button.clicked.connect(
+            lambda _checked=False, phone_number=phone.phone, button=menu_button: self.show_email_action_menu(
+                phone_number,
+                button.mapToGlobal(QtCore.QPoint(0, button.height())),
+                include_copy=False,
+            )
+        )
+        layout.addWidget(menu_button)
+        return cell
+
+    def show_email_action_menu(self, phone_number: str, global_pos: QtCore.QPoint, include_copy: bool = False) -> None:
+        phone = self.phone_store.get(phone_number)
+        if not phone:
+            return
+        menu = QtWidgets.QMenu(self)
+        copy_action = None
+        if include_copy:
+            copy_action = menu.addAction("复制手机号")
+            menu.addSeparator()
+
+        action_payloads: dict[QtGui.QAction, tuple[str, str]] = {}
+        phone_email_keys = {email.lower() for email in phone.emails}
+        bindable_emails = [email for email in self.available_emails if email.lower() not in phone_email_keys]
+        if len(phone.emails) < self.phone_store.max_emails_per_phone and bindable_emails:
+            bind_title = menu.addAction("绑定邮箱")
+            bind_title.setEnabled(False)
+            for email in bindable_emails:
+                action = menu.addAction(email)
+                action_payloads[action] = ("bind", email)
+        elif len(phone.emails) >= self.phone_store.max_emails_per_phone:
+            full_action = menu.addAction("已满 3/3，请先解绑")
+            full_action.setEnabled(False)
+        elif not self.available_emails:
+            empty_action = menu.addAction("当前菜单无邮箱")
+            empty_action.setEnabled(False)
+
+        if phone.emails:
+            if action_payloads:
+                menu.addSeparator()
+            unbind_title = menu.addAction("解绑邮箱")
+            unbind_title.setEnabled(False)
+            for email in sorted(phone.emails, key=str.lower):
+                action = menu.addAction(email)
+                action_payloads[action] = ("unbind", email)
+
+        action = menu.exec(global_pos)
+        if copy_action is not None and action == copy_action:
+            self.copy_phone_number(phone_number)
+            return
+        payload = action_payloads.get(action)
+        if not payload:
+            return
+        mode, email = payload
+        if mode == "bind":
+            bound, rejected = self.phone_store.bind_emails(phone_number, {email})
+            self.refresh_table()
+            self.changed.emit()
+            if bound:
+                self.code_label.setText(f"已绑定：{email} -> {phone_number}")
+            elif rejected:
+                self.code_label.setText("绑定失败：一个手机号最多绑定 3 个邮箱，或邮箱不存在。")
+            else:
+                self.code_label.setText(f"已存在绑定：{email}")
+            return
+        removed = self.phone_store.unbind_emails({email})
+        self.refresh_table()
+        self.changed.emit()
+        self.code_label.setText(f"已解绑：{email}" if removed else f"未找到绑定：{email}")
 
     def selected_phone_number(self) -> str:
         row = self.table.currentRow()
@@ -272,6 +382,25 @@ class PhoneDialog(QtWidgets.QDialog):
             return ""
         item = self.table.item(row, 0)
         return item.data(QtCore.Qt.ItemDataRole.UserRole) if item else ""
+
+    def show_table_context_menu(self, pos: QtCore.QPoint) -> None:
+        item = self.table.itemAt(pos)
+        if not item:
+            return
+        self.table.selectRow(item.row())
+        phone_item = self.table.item(item.row(), 0)
+        phone_number = phone_item.data(QtCore.Qt.ItemDataRole.UserRole) if phone_item else ""
+        if not phone_number:
+            return
+        menu = QtWidgets.QMenu(self)
+        copy_action = menu.addAction("复制手机号")
+        action = menu.exec(self.table.viewport().mapToGlobal(pos))
+        if action == copy_action:
+            self.copy_phone_number(str(phone_number))
+
+    def copy_phone_number(self, phone_number: str) -> None:
+        QtWidgets.QApplication.clipboard().setText(phone_number)
+        self.code_label.setText(f"已复制手机号：{phone_number}")
 
     def load_file(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
@@ -288,8 +417,7 @@ class PhoneDialog(QtWidgets.QDialog):
         if not phone_number:
             QtWidgets.QMessageBox.information(self, "请选择手机号", "请先在列表里选中一个手机号。")
             return
-        QtWidgets.QApplication.clipboard().setText(phone_number)
-        self.code_label.setText(f"已复制手机号：{phone_number}")
+        self.copy_phone_number(phone_number)
 
     def import_phones(self) -> None:
         records, invalid = parse_phone_import_text(self.editor.toPlainText())
@@ -302,30 +430,19 @@ class PhoneDialog(QtWidgets.QDialog):
         self.changed.emit()
         QtWidgets.QMessageBox.information(self, "导入完成", f"新增 {added}，更新 {updated}，重复 {skipped}，无效 {invalid}。")
 
-    def bind_selected_emails(self) -> None:
+    def clear_selected_phone_bindings(self) -> None:
         phone_number = self.selected_phone_number()
         if not phone_number:
             QtWidgets.QMessageBox.information(self, "请选择手机号", "请先在列表里选中一个手机号。")
             return
-        if not self.selected_emails:
-            QtWidgets.QMessageBox.information(self, "没有勾选邮箱", "请先在主界面勾选要绑定的邮箱。")
+        phone = self.phone_store.get(phone_number)
+        if not phone or not phone.emails:
+            self.code_label.setText("当前手机号没有绑定邮箱。")
             return
-        bound, rejected = self.phone_store.bind_emails(phone_number, set(self.selected_emails))
+        removed = self.phone_store.unbind_emails(set(phone.emails))
         self.refresh_table()
         self.changed.emit()
-        message = f"已绑定 {bound} 个邮箱。"
-        if rejected:
-            message += f" 未绑定 {len(rejected)} 个，因为一个手机号最多绑定 3 个邮箱。"
-        QtWidgets.QMessageBox.information(self, "绑定完成", message)
-
-    def unbind_selected_emails(self) -> None:
-        if not self.selected_emails:
-            QtWidgets.QMessageBox.information(self, "没有勾选邮箱", "请先在主界面勾选要解绑的邮箱。")
-            return
-        removed = self.phone_store.unbind_emails(set(self.selected_emails))
-        self.refresh_table()
-        self.changed.emit()
-        QtWidgets.QMessageBox.information(self, "解绑完成", f"已解绑 {removed} 个邮箱。")
+        self.code_label.setText(f"已清空 {phone_number} 的 {removed} 个绑定邮箱。")
 
     def export_phones(self) -> None:
         if not self.phone_store.phones:

@@ -252,10 +252,27 @@ def app_stylesheet(theme: str = "light") -> str:
         min-height: 24px;
         font-weight: 600;
     }}
+    QLabel#BoundEmailText {{
+        color: {text};
+        font-size: 13px;
+    }}
+    QToolButton[role="email-menu"] {{
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        color: {blue};
+        font-size: 15px;
+        font-weight: 700;
+        padding: 0;
+    }}
+    QToolButton[role="email-menu"]:hover {{
+        background: {blue_soft};
+        border: 1px solid {border};
+    }}
     QComboBox#CountCombo::drop-down {{
         subcontrol-origin: padding;
         subcontrol-position: top right;
-        width: 28px;
+        width: 24px;
         border: none;
         background: transparent;
     }}
@@ -394,6 +411,75 @@ def enable_qt_dpi() -> None:
     QtGui.QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
         QtCore.Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
+
+
+class FlowLayout(QtWidgets.QLayout):
+    def __init__(self, parent: QtWidgets.QWidget | None = None, margin: int = 0, h_spacing: int = 10, v_spacing: int = 8) -> None:
+        super().__init__(parent)
+        self.item_list: list[QtWidgets.QLayoutItem] = []
+        self.h_spacing = h_spacing
+        self.v_spacing = v_spacing
+        self.setContentsMargins(margin, margin, margin, margin)
+
+    def addItem(self, item: QtWidgets.QLayoutItem) -> None:
+        self.item_list.append(item)
+
+    def count(self) -> int:
+        return len(self.item_list)
+
+    def itemAt(self, index: int) -> QtWidgets.QLayoutItem | None:
+        if 0 <= index < len(self.item_list):
+            return self.item_list[index]
+        return None
+
+    def takeAt(self, index: int) -> QtWidgets.QLayoutItem | None:
+        if 0 <= index < len(self.item_list):
+            return self.item_list.pop(index)
+        return None
+
+    def expandingDirections(self) -> QtCore.Qt.Orientation:
+        return QtCore.Qt.Orientation(0)
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        return self.do_layout(QtCore.QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect: QtCore.QRect) -> None:
+        super().setGeometry(rect)
+        self.do_layout(rect, test_only=False)
+
+    def sizeHint(self) -> QtCore.QSize:
+        return self.minimumSize()
+
+    def minimumSize(self) -> QtCore.QSize:
+        size = QtCore.QSize()
+        for item in self.item_list:
+            size = size.expandedTo(item.minimumSize())
+        left, top, right, bottom = self.getContentsMargins()
+        size += QtCore.QSize(left + right, top + bottom)
+        return size
+
+    def do_layout(self, rect: QtCore.QRect, test_only: bool) -> int:
+        left, top, right, bottom = self.getContentsMargins()
+        effective = rect.adjusted(left, top, -right, -bottom)
+        x = effective.x()
+        y = effective.y()
+        line_height = 0
+        for item in self.item_list:
+            hint = item.sizeHint()
+            next_x = x + hint.width() + self.h_spacing
+            if next_x - self.h_spacing > effective.right() and line_height > 0:
+                x = effective.x()
+                y += line_height + self.v_spacing
+                next_x = x + hint.width() + self.h_spacing
+                line_height = 0
+            if not test_only:
+                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), hint))
+            x = next_x
+            line_height = max(line_height, hint.height())
+        return y + line_height + bottom - rect.y()
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -636,8 +722,7 @@ class MainWindow(QtWidgets.QMainWindow):
         top_row.addWidget(self.count_card, 0, QtCore.Qt.AlignmentFlag.AlignRight)
         controls_layout.addLayout(top_row)
 
-        toolbar_row = QtWidgets.QHBoxLayout()
-        toolbar_row.setSpacing(10)
+        toolbar_row = FlowLayout(h_spacing=10, v_spacing=8)
         self.imap_button = pill_button("IMAP令牌", role="protocol", checkable=True)
         self.graph_button = pill_button("Graph令牌", role="protocol", checkable=True)
         self.imap_button.clicked.connect(lambda: self.set_protocol("IMAP"))
@@ -645,12 +730,14 @@ class MainWindow(QtWidgets.QMainWindow):
         toolbar_buttons: list[QtWidgets.QPushButton] = [self.imap_button, self.graph_button]
 
         self.auto_fetch_box = CheckBox("导入后自动取件")
-        self.auto_fetch_box.setFixedSize(152, 38)
+        self.auto_fetch_box.setMinimumSize(152, 38)
+        self.auto_fetch_box.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         self.auto_fetch_box.setChecked(self.config_store.auto_fetch_after_import)
         self.auto_fetch_box.toggled.connect(self.save_config)
 
         self.concise_mode_box = CheckBox("简洁模式")
-        self.concise_mode_box.setFixedSize(104, 38)
+        self.concise_mode_box.setMinimumSize(104, 38)
+        self.concise_mode_box.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         self.concise_mode_box.setChecked(self.config_store.concise_mode)
         self.concise_mode_box.toggled.connect(self.save_config)
 
@@ -669,10 +756,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.prepare_toolbar_button(button)
             toolbar_row.addWidget(button)
 
-        toolbar_row.addSpacing(4)
         toolbar_row.addWidget(self.auto_fetch_box)
         toolbar_row.addWidget(self.concise_mode_box)
-        toolbar_row.addStretch(1)
         controls_layout.addLayout(toolbar_row)
 
         layout.addWidget(controls)
@@ -721,7 +806,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @staticmethod
     def prepare_toolbar_button(button: QtWidgets.QPushButton) -> None:
-        button.setFixedSize(104, 38)
+        text_width = button.fontMetrics().horizontalAdvance(button.text())
+        button.setFixedHeight(38)
+        button.setMinimumWidth(max(92, text_width + 30))
         button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
 
     def make_count_card(self) -> QtWidgets.QFrame:
@@ -790,16 +877,22 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def filtered_accounts(self) -> list[AccountRecord]:
         needle = self.account_search.text().strip().lower()
-        current = self.current_group()
-        pool = sorted(
-            [account for account in self.account_store.accounts if account.category == current],
-            key=lambda account: account.email.lower(),
-        )
+        pool = self.current_group_accounts()
         if not needle:
             return pool
         starts = [account for account in pool if account.email.lower().startswith(needle)]
         contains = [account for account in pool if needle in account.email.lower() and account not in starts]
         return starts + contains
+
+    def current_group_accounts(self) -> list[AccountRecord]:
+        current = self.current_group()
+        return sorted(
+            [account for account in self.account_store.accounts if account.category == current],
+            key=lambda account: account.email.lower(),
+        )
+
+    def current_group_emails(self) -> list[str]:
+        return [account.email for account in self.current_group_accounts()]
 
     def visible_account_emails(self) -> set[str]:
         return {account.email for account in self.filtered_accounts()}
@@ -870,7 +963,7 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog.exec()
 
     def open_phone_dialog(self) -> None:
-        dialog = PhoneDialog(self.phone_store, self.selected_emails(), self)
+        dialog = PhoneDialog(self.phone_store, self.selected_emails(), self.current_group_emails(), self)
         dialog.setStyleSheet(self.styleSheet())
         dialog.changed.connect(lambda: self.refresh_accounts())
         dialog.sms_result_ready.connect(self.add_sms_result)
