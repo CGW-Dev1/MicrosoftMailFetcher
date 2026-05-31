@@ -4,6 +4,7 @@ from pathlib import Path
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
+from .exporting import ensure_export_suffix, join_export_parts
 from .models import ImportRecord, PhoneRecord
 from .parsing import parse_import_text, parse_phone_import_text
 from .services import SmsService
@@ -456,8 +457,14 @@ class PhoneDialog(QtWidgets.QDialog):
             parts = [phone.phone, phone.api_url]
             if phone.emails:
                 parts.append(",".join(phone.emails))
-            lines.append("----".join(parts))
-        Path(path).write_text("\n".join(lines), encoding="utf-8")
+            lines.append(join_export_parts(parts))
+        export_path = ensure_export_suffix(Path(path), ".txt")
+        try:
+            export_path.write_text("\n".join(lines), encoding="utf-8")
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "导出失败", f"无法写入文件：{exc}")
+            self.code_label.setText("导出失败")
+            return
         QtWidgets.QMessageBox.information(self, "导出完成", f"已导出 {len(lines)} 个手机号。")
 
     def delete_selected_phone(self) -> None:

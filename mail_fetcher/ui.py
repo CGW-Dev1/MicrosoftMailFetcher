@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
@@ -16,11 +17,12 @@ from .constants import (
     EXPORT_TOP_OPTIONS,
 )
 from .dialogs import ImportDialog, MailDetailDialog, PhoneCodeWorker, PhoneDialog
+from .exporting import ensure_export_suffix, join_export_parts
 from .models import AccountRecord, ImportRecord, PhoneImportRecord
 from .parsing import clean_verification_code, compact_text
 from .services import MailService
 from .storage import AccountStore, ConfigStore, PhoneStore
-from .widgets import AccountCard, BadgeLabel, CheckBox, CountSelector, MailCard, SearchField, pill_button
+from .widgets import AccountCard, BadgeLabel, CheckBox, CountSelector, FlowLayout, MailCard, SearchField, pill_button
 from .workers import FetchWorker
 
 SURFACE = "#ffffff"
@@ -39,6 +41,16 @@ CYAN_TEXT = "#1183c8"
 BLUE_SOFT = "#dfe9ff"
 RED_SOFT = "#fff3f2"
 RED = "#e25353"
+
+
+def app_icon() -> QtGui.QIcon:
+    candidates = [Path(__file__).resolve().parent.parent / "assets" / "mail.ico"]
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys.executable))
+    for path in candidates:
+        if path.exists():
+            return QtGui.QIcon(str(path))
+    return QtGui.QIcon()
 
 
 def app_stylesheet(theme: str = "light") -> str:
@@ -108,10 +120,16 @@ def app_stylesheet(theme: str = "light") -> str:
         background: {bg};
         color: {text};
     }}
-    QFrame#HeaderCard, QFrame#SidebarCard, QFrame#ControlsCard, QFrame#MailCard, QFrame#AccountCard, QFrame#StatCard {{
+    QFrame#HeaderCard, QFrame#SidebarCard, QFrame#ControlsCard, QFrame#ProgressCard, QFrame#MailCard, QFrame#AccountCard, QFrame#StatCard {{
         background: {surface};
         border: 1px solid {border};
         border-radius: 16px;
+    }}
+    QFrame#ResultDivider {{
+        background: {border};
+        border: none;
+        min-height: 1px;
+        max-height: 1px;
     }}
     QFrame#CountSelect {{
         background: {surface};
@@ -120,6 +138,16 @@ def app_stylesheet(theme: str = "light") -> str:
     }}
     QFrame#CountSelect:hover {{
         border: 1px solid {blue};
+    }}
+    QFrame#ResultSection,
+    QFrame#ResultHeaderBand {{
+        background: {surface};
+        border: none;
+        border-radius: 16px;
+    }}
+    QFrame#ResultHeaderBand {{
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
     }}
     QFrame#SidebarCard {{
         background: {surface_soft};
@@ -173,6 +201,19 @@ def app_stylesheet(theme: str = "light") -> str:
         color: {muted};
         font-size: 12px;
         font-weight: 500;
+    }}
+    QLabel#ProgressTitle {{
+        color: {text};
+        font-size: 13px;
+        font-weight: 600;
+    }}
+    QLabel#ProgressPercent {{
+        background: {blue_soft};
+        color: {blue};
+        border-radius: 10px;
+        padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 600;
     }}
     QLabel#DialogTitle {{
         font-size: 24px;
@@ -379,7 +420,7 @@ def app_stylesheet(theme: str = "light") -> str:
     }}
     QScrollArea#ResultScroll QWidget#ResultViewport,
     QWidget#ResultContainer {{
-        background: {bg};
+        background: {surface};
     }}
     QScrollArea#AccountScroll,
     QScrollArea#ResultScroll {{
@@ -398,6 +439,14 @@ def app_stylesheet(theme: str = "light") -> str:
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
         height: 0;
     }}
+    QSplitter::handle:horizontal {{
+        background: {border};
+        border-left: 5px solid {bg};
+        border-right: 5px solid {bg};
+    }}
+    QSplitter::handle:horizontal:hover {{
+        background: {blue};
+    }}
     """
 
 
@@ -413,75 +462,6 @@ def enable_qt_dpi() -> None:
     )
 
 
-class FlowLayout(QtWidgets.QLayout):
-    def __init__(self, parent: QtWidgets.QWidget | None = None, margin: int = 0, h_spacing: int = 10, v_spacing: int = 8) -> None:
-        super().__init__(parent)
-        self.item_list: list[QtWidgets.QLayoutItem] = []
-        self.h_spacing = h_spacing
-        self.v_spacing = v_spacing
-        self.setContentsMargins(margin, margin, margin, margin)
-
-    def addItem(self, item: QtWidgets.QLayoutItem) -> None:
-        self.item_list.append(item)
-
-    def count(self) -> int:
-        return len(self.item_list)
-
-    def itemAt(self, index: int) -> QtWidgets.QLayoutItem | None:
-        if 0 <= index < len(self.item_list):
-            return self.item_list[index]
-        return None
-
-    def takeAt(self, index: int) -> QtWidgets.QLayoutItem | None:
-        if 0 <= index < len(self.item_list):
-            return self.item_list.pop(index)
-        return None
-
-    def expandingDirections(self) -> QtCore.Qt.Orientation:
-        return QtCore.Qt.Orientation(0)
-
-    def hasHeightForWidth(self) -> bool:
-        return True
-
-    def heightForWidth(self, width: int) -> int:
-        return self.do_layout(QtCore.QRect(0, 0, width, 0), test_only=True)
-
-    def setGeometry(self, rect: QtCore.QRect) -> None:
-        super().setGeometry(rect)
-        self.do_layout(rect, test_only=False)
-
-    def sizeHint(self) -> QtCore.QSize:
-        return self.minimumSize()
-
-    def minimumSize(self) -> QtCore.QSize:
-        size = QtCore.QSize()
-        for item in self.item_list:
-            size = size.expandedTo(item.minimumSize())
-        left, top, right, bottom = self.getContentsMargins()
-        size += QtCore.QSize(left + right, top + bottom)
-        return size
-
-    def do_layout(self, rect: QtCore.QRect, test_only: bool) -> int:
-        left, top, right, bottom = self.getContentsMargins()
-        effective = rect.adjusted(left, top, -right, -bottom)
-        x = effective.x()
-        y = effective.y()
-        line_height = 0
-        for item in self.item_list:
-            hint = item.sizeHint()
-            next_x = x + hint.width() + self.h_spacing
-            if next_x - self.h_spacing > effective.right() and line_height > 0:
-                x = effective.x()
-                y += line_height + self.v_spacing
-                next_x = x + hint.width() + self.h_spacing
-                line_height = 0
-            if not test_only:
-                item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), hint))
-            x = next_x
-            line_height = max(line_height, hint.height())
-        return y + line_height + bottom - rect.y()
-
-
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -490,8 +470,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setMinimumSize(1260, 760)
 
         icon_path = Path(__file__).resolve().parent.parent / "assets" / "mail.ico"
-        if icon_path.exists():
-            self.setWindowIcon(QtGui.QIcon(str(icon_path)))
+        self.setWindowIcon(app_icon())
 
         self.account_store = AccountStore()
         self.phone_store = PhoneStore(self.account_store)
@@ -524,15 +503,19 @@ class MainWindow(QtWidgets.QMainWindow):
         header = self.make_header(icon_path)
         outer.addWidget(header)
 
-        body = QtWidgets.QHBoxLayout()
-        body.setSpacing(14)
-        outer.addLayout(body, 1)
+        body = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        body.setHandleWidth(16)
+        body.setChildrenCollapsible(False)
+        outer.addWidget(body, 1)
 
         self.sidebar = self.make_sidebar()
-        body.addWidget(self.sidebar, 0)
+        body.addWidget(self.sidebar)
 
         self.main_panel = self.make_main_panel()
-        body.addWidget(self.main_panel, 1)
+        body.addWidget(self.main_panel)
+        body.setStretchFactor(0, 4)
+        body.setStretchFactor(1, 6)
+        body.setSizes([560, 920])
 
     def make_header(self, icon_path: Path) -> QtWidgets.QFrame:
         frame = QtWidgets.QFrame()
@@ -584,7 +567,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def make_sidebar(self) -> QtWidgets.QFrame:
         frame = QtWidgets.QFrame()
         frame.setObjectName("SidebarCard")
-        frame.setFixedWidth(520)
+        frame.setMinimumWidth(390)
+        frame.setMaximumWidth(900)
+        frame.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Expanding)
 
         layout = QtWidgets.QVBoxLayout(frame)
         layout.setContentsMargins(14, 12, 14, 12)
@@ -762,19 +747,50 @@ class MainWindow(QtWidgets.QMainWindow):
 
         layout.addWidget(controls)
 
+        progress_card = QtWidgets.QFrame()
+        progress_card.setObjectName("ProgressCard")
+        progress_layout = QtWidgets.QVBoxLayout(progress_card)
+        progress_layout.setContentsMargins(14, 10, 14, 10)
+        progress_layout.setSpacing(7)
+
+        progress_header = QtWidgets.QHBoxLayout()
+        progress_header.setSpacing(8)
+        progress_title = QtWidgets.QLabel("取件进度")
+        progress_title.setObjectName("ProgressTitle")
+        progress_header.addWidget(progress_title)
+
         self.progress_text = QtWidgets.QLabel("等待操作")
         self.progress_text.setObjectName("ProgressText")
         self.progress_text.setMaximumHeight(18)
-        layout.addWidget(self.progress_text)
+        progress_header.addWidget(self.progress_text, 1)
+
+        self.progress_percent = QtWidgets.QLabel("0%")
+        self.progress_percent.setObjectName("ProgressPercent")
+        self.progress_percent.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.progress_percent.setFixedHeight(24)
+        self.progress_percent.setMinimumWidth(54)
+        progress_header.addWidget(self.progress_percent)
+        progress_layout.addLayout(progress_header)
 
         self.progress_bar = QtWidgets.QProgressBar()
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
-        self.progress_bar.setMaximumHeight(10)
-        layout.addWidget(self.progress_bar)
+        self.progress_bar.setFixedHeight(10)
+        progress_layout.addWidget(self.progress_bar)
+        layout.addWidget(progress_card)
 
-        header = QtWidgets.QHBoxLayout()
+        result_section = QtWidgets.QFrame()
+        result_section.setObjectName("ResultSection")
+        result_section_layout = QtWidgets.QVBoxLayout(result_section)
+        result_section_layout.setContentsMargins(0, 0, 0, 0)
+        result_section_layout.setSpacing(0)
+
+        header_band = QtWidgets.QFrame()
+        header_band.setObjectName("ResultHeaderBand")
+        header = QtWidgets.QHBoxLayout(header_band)
+        header.setContentsMargins(14, 10, 14, 10)
+        header.setSpacing(8)
         title = QtWidgets.QLabel("取件结果")
         title.setObjectName("SectionTitle")
         header.addWidget(title)
@@ -787,7 +803,11 @@ class MainWindow(QtWidgets.QMainWindow):
         header.addWidget(self.imap_badge)
         header.addWidget(self.sms_badge)
         header.addWidget(self.total_badge)
-        layout.addLayout(header)
+        result_section_layout.addWidget(header_band)
+
+        result_divider = QtWidgets.QFrame()
+        result_divider.setObjectName("ResultDivider")
+        result_section_layout.addWidget(result_divider)
 
         self.result_scroll = QtWidgets.QScrollArea()
         self.result_scroll.setObjectName("ResultScroll")
@@ -797,11 +817,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.result_container = QtWidgets.QWidget()
         self.result_container.setObjectName("ResultContainer")
         self.result_layout = QtWidgets.QVBoxLayout(self.result_container)
-        self.result_layout.setContentsMargins(0, 0, 0, 0)
+        self.result_layout.setContentsMargins(14, 10, 10, 0)
         self.result_layout.setSpacing(5)
         self.result_layout.addStretch(1)
         self.result_scroll.setWidget(self.result_container)
-        layout.addWidget(self.result_scroll, 1)
+        result_section_layout.addWidget(self.result_scroll, 1)
+        layout.addWidget(result_section, 1)
         return panel
 
     @staticmethod
@@ -1062,6 +1083,7 @@ class MainWindow(QtWidgets.QMainWindow):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "导出邮箱", "", "Text files (*.txt)")
         if not path:
             return
+        export_path = ensure_export_suffix(Path(path), ".txt")
         order = {category: index for index, category in enumerate(ACCOUNT_CATEGORY_ORDER)}
         accounts = sorted(
             self.account_store.accounts,
@@ -1077,9 +1099,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 lines.append(f"# ===== {label} =====")
                 current_category = account.category
             lines.append(
-                "----".join(self.export_account_parts(account, label))
+                join_export_parts(self.export_account_parts(account, label))
             )
-        Path(path).write_text("\n".join(lines), encoding="utf-8")
+        try:
+            export_path.write_text("\n".join(lines), encoding="utf-8")
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "导出失败", f"无法写入文件：{exc}")
+            self.update_status("导出失败")
+            return
         self.update_status(f"已导出 {len(accounts)} 个邮箱")
 
     def export_account_parts(self, account: AccountRecord, label: str) -> list[str]:
@@ -1160,6 +1187,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.mail_rows.clear()
         self.render_results(reset_scroll=True)
         self.progress_text.setText("准备取件...")
+        self.progress_percent.setText("0%")
         self.progress_bar.setRange(0, len(accounts))
         self.progress_bar.setValue(0)
 
@@ -1185,11 +1213,14 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.fetch_worker is not None:
             self.fetch_worker.request_stop()
             self.progress_text.setText("正在停止...")
+            self.progress_percent.setText("停止中")
             self.update_status("正在停止取件")
 
     def on_progress(self, done: int, total: int, account: str, messages: int) -> None:
         self.progress_bar.setRange(0, max(total, 1))
         self.progress_bar.setValue(done)
+        percent = int((done / max(total, 1)) * 100)
+        self.progress_percent.setText(f"{percent}%")
         self.progress_text.setText(f"[{done}/{total}] {compact_text(account, 44)}，已取 {messages} 条")
 
     def on_result_chunk(self, rows: object) -> None:
@@ -1202,8 +1233,12 @@ class MainWindow(QtWidgets.QMainWindow):
         if stopped:
             self.update_status(f"已停止 | 已完成 {success}/{total_accounts} | {total_messages} 条")
             self.progress_text.setText("已停止")
+            self.progress_percent.setText("已停止")
         else:
             self.update_status(f"完成 {success}/{total_accounts} | {total_messages} 条")
+            self.progress_bar.setRange(0, max(total_accounts, 1))
+            self.progress_bar.setValue(total_accounts)
+            self.progress_percent.setText("100%")
             self.progress_text.setText(f"完成：{success}/{total_accounts} 个任务，{total_messages} 条")
         self.render_results(reset_scroll=True)
         self.fetch_worker = None
@@ -1273,32 +1308,45 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         import csv
 
-        with open(path, "w", newline="", encoding="utf-8-sig") as handle:
-            writer = csv.DictWriter(
-                handle,
-                fieldnames=["account", "phone", "protocol", "time", "sender", "subject", "code", "read", "preview", "webLink", "concise"],
-                extrasaction="ignore",
-            )
-            writer.writeheader()
-            writer.writerows(rows)
+        export_path = ensure_export_suffix(Path(path), ".csv")
+        try:
+            with open(export_path, "w", newline="", encoding="utf-8-sig") as handle:
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=["account", "phone", "protocol", "time", "sender", "subject", "code", "read", "preview", "webLink", "concise"],
+                    extrasaction="ignore",
+                )
+                writer.writeheader()
+                writer.writerows(rows)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "导出失败", f"无法写入文件：{exc}")
+            self.update_status("导出失败")
+            return
         self.update_status(f"已导出 {len(rows)} 条结果")
 
     @staticmethod
     def rebuild_list(layout: QtWidgets.QVBoxLayout, widgets: list[QtWidgets.QWidget]) -> None:
-        while layout.count():
-            item = layout.takeAt(0)
-            widget = item.widget()
-            child_layout = item.layout()
-            if widget is not None:
-                widget.deleteLater()
-            elif child_layout is not None:
-                while child_layout.count():
-                    child_item = child_layout.takeAt(0)
-                    if child_item.widget():
-                        child_item.widget().deleteLater()
-        for widget in widgets:
-            layout.addWidget(widget)
-        layout.addStretch(1)
+        parent = layout.parentWidget()
+        if parent is not None:
+            parent.setUpdatesEnabled(False)
+        try:
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                child_layout = item.layout()
+                if widget is not None:
+                    widget.deleteLater()
+                elif child_layout is not None:
+                    while child_layout.count():
+                        child_item = child_layout.takeAt(0)
+                        if child_item.widget():
+                            child_item.widget().deleteLater()
+            for widget in widgets:
+                layout.addWidget(widget)
+            layout.addStretch(1)
+        finally:
+            if parent is not None:
+                parent.setUpdatesEnabled(True)
 
 
 def run_app() -> int:
@@ -1306,9 +1354,7 @@ def run_app() -> int:
     app = QtWidgets.QApplication([])
     app.setApplicationDisplayName(DISPLAY_NAME)
     app.setStyle("Fusion")
-    icon_path = Path(__file__).resolve().parent.parent / "assets" / "mail.ico"
-    if icon_path.exists():
-        app.setWindowIcon(QtGui.QIcon(str(icon_path)))
+    app.setWindowIcon(app_icon())
     font = QtGui.QFont("Microsoft YaHei UI", 10)
     font.setHintingPreference(QtGui.QFont.HintingPreference.PreferNoHinting)
     font.setStyleStrategy(
