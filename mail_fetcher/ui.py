@@ -16,7 +16,7 @@ from .constants import (
     DISPLAY_NAME,
     EXPORT_TOP_OPTIONS,
 )
-from .dialogs import ImportDialog, MailDetailDialog, PhoneCodeWorker, PhoneDialog
+from .dialogs import ImportDialog, MailDetailDialog, PhoneCodeWorker, PhoneDialog, StandalonePhoneCodeDialog
 from .exporting import ensure_export_suffix, join_export_parts
 from .models import AccountRecord, ImportRecord, PhoneImportRecord
 from .parsing import clean_verification_code, compact_text
@@ -120,7 +120,7 @@ def app_stylesheet(theme: str = "light") -> str:
         background: {bg};
         color: {text};
     }}
-    QFrame#HeaderCard, QFrame#SidebarCard, QFrame#ControlsCard, QFrame#ProgressCard, QFrame#MailCard, QFrame#AccountCard, QFrame#StatCard {{
+    QFrame#HeaderCard, QFrame#SidebarCard, QFrame#ControlsCard, QFrame#ProgressCard, QFrame#PhoneProgressCard, QFrame#MailCard, QFrame#AccountCard, QFrame#StatCard {{
         background: {surface};
         border: 1px solid {border};
         border-radius: 16px;
@@ -212,6 +212,29 @@ def app_stylesheet(theme: str = "light") -> str:
         color: {blue};
         border-radius: 10px;
         padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 600;
+    }}
+    QLabel#PhoneProgressTitle {{
+        background: transparent;
+        border: none;
+        color: {text};
+        font-size: 13px;
+        font-weight: 600;
+    }}
+    QLabel#PhoneProgressText {{
+        background: transparent;
+        border: none;
+        color: {muted};
+        font-size: 12px;
+        font-weight: 500;
+    }}
+    QLabel#PhoneProgressPercent {{
+        background: transparent;
+        border: 1px solid {border};
+        border-radius: 10px;
+        color: {blue};
+        padding: 2px 10px;
         font-size: 12px;
         font-weight: 600;
     }}
@@ -480,6 +503,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.fetch_worker: FetchWorker | None = None
         self.phone_code_workers: dict[str, PhoneCodeWorker] = {}
+        self.standalone_phone_dialog: StandalonePhoneCodeDialog | None = None
         self.fetch_running = False
         self.account_states: dict[str, bool] = {account.email: True for account in self.account_store.accounts}
         self.mail_rows: list[dict] = []
@@ -548,6 +572,18 @@ class MainWindow(QtWidgets.QMainWindow):
         subtitle.setObjectName("HeroSubTitle")
         titles.addWidget(subtitle)
         layout.addLayout(titles, 1)
+
+        self.auto_fetch_box = CheckBox("导入后自动取件")
+        self.auto_fetch_box.setFixedSize(152, 38)
+        self.auto_fetch_box.setChecked(self.config_store.auto_fetch_after_import)
+        self.auto_fetch_box.toggled.connect(self.save_config)
+        layout.addWidget(self.auto_fetch_box, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+
+        self.concise_mode_box = CheckBox("简洁模式")
+        self.concise_mode_box.setFixedSize(104, 38)
+        self.concise_mode_box.setChecked(self.config_store.concise_mode)
+        self.concise_mode_box.toggled.connect(self.save_config)
+        layout.addWidget(self.concise_mode_box, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
 
         self.dark_mode_box = CheckBox("深色模式")
         self.dark_mode_box.setFixedSize(104, 38)
@@ -714,20 +750,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.graph_button.clicked.connect(lambda: self.set_protocol("Graph"))
         toolbar_buttons: list[QtWidgets.QPushButton] = [self.imap_button, self.graph_button]
 
-        self.auto_fetch_box = CheckBox("导入后自动取件")
-        self.auto_fetch_box.setMinimumSize(152, 38)
-        self.auto_fetch_box.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.auto_fetch_box.setChecked(self.config_store.auto_fetch_after_import)
-        self.auto_fetch_box.toggled.connect(self.save_config)
-
-        self.concise_mode_box = CheckBox("简洁模式")
-        self.concise_mode_box.setMinimumSize(104, 38)
-        self.concise_mode_box.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.concise_mode_box.setChecked(self.config_store.concise_mode)
-        self.concise_mode_box.toggled.connect(self.save_config)
-
         export_csv_button = pill_button("导出CSV", role="secondary")
         export_csv_button.clicked.connect(self.export_csv)
+        phone_code_button = pill_button("手机号取码", role="secondary")
+        phone_code_button.clicked.connect(self.open_standalone_phone_code_dialog)
         self.stop_button = pill_button("停止", role="secondary")
         self.stop_button.clicked.connect(self.request_stop)
         self.fetch_selected_button = pill_button("选中取件", role="primary")
@@ -735,14 +761,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.fetch_all_button = pill_button("全部取件", role="primary")
         self.fetch_all_button.clicked.connect(self.fetch_all)
         self.fetch_all_button.setStyleSheet("")
-        toolbar_buttons.extend([export_csv_button, self.stop_button, self.fetch_selected_button, self.fetch_all_button])
+        toolbar_buttons.extend([export_csv_button, phone_code_button, self.stop_button, self.fetch_selected_button, self.fetch_all_button])
 
         for button in toolbar_buttons:
             self.prepare_toolbar_button(button)
             toolbar_row.addWidget(button)
 
-        toolbar_row.addWidget(self.auto_fetch_box)
-        toolbar_row.addWidget(self.concise_mode_box)
         controls_layout.addLayout(toolbar_row)
 
         layout.addWidget(controls)
@@ -858,6 +882,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def apply_theme(self) -> None:
         self.config_store.theme = "dark" if self.dark_mode_box.isChecked() else "light"
         self.setStyleSheet(app_stylesheet(self.config_store.theme))
+        if self.standalone_phone_dialog is not None:
+            self.standalone_phone_dialog.setStyleSheet(self.styleSheet())
         self.save_config()
 
     @property
@@ -989,6 +1015,15 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog.changed.connect(lambda: self.refresh_accounts())
         dialog.sms_result_ready.connect(self.add_sms_result)
         dialog.exec()
+
+    def open_standalone_phone_code_dialog(self) -> None:
+        if self.standalone_phone_dialog is None:
+            self.standalone_phone_dialog = StandalonePhoneCodeDialog(self)
+            self.standalone_phone_dialog.destroyed.connect(lambda: setattr(self, "standalone_phone_dialog", None))
+        self.standalone_phone_dialog.setStyleSheet(self.styleSheet())
+        self.standalone_phone_dialog.show()
+        self.standalone_phone_dialog.raise_()
+        self.standalone_phone_dialog.activateWindow()
 
     def add_sms_result(self, row: object) -> None:
         data = dict(row)

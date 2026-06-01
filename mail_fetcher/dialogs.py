@@ -6,9 +6,9 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 
 from .exporting import ensure_export_suffix, join_export_parts
 from .models import ImportRecord, PhoneRecord
-from .parsing import parse_import_text, parse_phone_import_text
+from .parsing import compact_text, parse_import_text, parse_phone_import_text, phone_without_country_code
 from .services import SmsService
-from .storage import PhoneStore
+from .storage import PhoneStore, StandalonePhoneCodeStore
 from .widgets.common import ElidedLabel, pill_button
 
 
@@ -136,6 +136,387 @@ class PhoneCodeWorker(QtCore.QThread):
             self.result_ready.emit(row)
         except Exception as exc:
             self.error_ready.emit(str(exc))
+
+
+class StandalonePhoneCodeWorker(QtCore.QThread):
+    result_ready = QtCore.pyqtSignal(str, object)
+    error_ready = QtCore.pyqtSignal(str, str)
+    progress_changed = QtCore.pyqtSignal(int, int)
+    finished_summary = QtCore.pyqtSignal(int, int)
+
+    def __init__(self, phones: list[PhoneRecord], parent: QtCore.QObject | None = None) -> None:
+        super().__init__(parent)
+        self.phones = phones
+
+    def run(self) -> None:
+        service = SmsService()
+        success = 0
+        total = len(self.phones)
+        for index, phone in enumerate(self.phones, start=1):
+            try:
+                row = service.fetch_phone_row(phone, concise_mode=False)
+                self.result_ready.emit(phone.phone, row)
+                success += 1
+            except Exception as exc:
+                self.error_ready.emit(phone.phone, str(exc))
+            self.progress_changed.emit(index, total)
+        self.finished_summary.emit(success, total)
+
+
+class StandalonePhoneCodeDialog(QtWidgets.QDialog):
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.store = StandalonePhoneCodeStore()
+        self.records: dict[str, PhoneRecord] = self.store.as_dict()
+        self.results: dict[str, dict] = {}
+        self.worker: StandalonePhoneCodeWorker | None = None
+        self.visible_phones: list[str] = []
+
+        self.setWindowTitle("手机号取码")
+        self.resize(1040, 700)
+        self.setMinimumSize(900, 620)
+        self.setModal(False)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(22, 20, 22, 20)
+        layout.setSpacing(12)
+
+        title = QtWidgets.QLabel("手机号取码")
+        title.setObjectName("DialogTitle")
+        layout.addWidget(title)
+
+        desc = QtWidgets.QLabel("每行格式：+6287763590795----https://api.sms8.net/api/record?token=xxx。这里独立取码，不绑定邮箱，也不改动邮箱取件结果。")
+        desc.setObjectName("DialogText")
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        self.editor = QtWidgets.QPlainTextEdit()
+        self.editor.setObjectName("ImportEditor")
+        self.editor.setPlaceholderText("+6287763590795----https://api.sms8.net/api/record?token=xxx")
+        self.editor.setMaximumHeight(96)
+        layout.addWidget(self.editor)
+
+        actions = QtWidgets.QHBoxLayout()
+        actions.setSpacing(10)
+        self.load_button = pill_button("从文件载入", role="secondary")
+        self.load_button.clicked.connect(self.load_file)
+        self.import_button = pill_button("导入手机号", role="primary")
+        self.import_button.clicked.connect(self.import_phones)
+        self.fetch_selected_button = pill_button("选中取码", role="primary")
+        self.fetch_selected_button.clicked.connect(self.fetch_selected)
+        self.fetch_all_button = pill_button("全部取码", role="primary")
+        self.fetch_all_button.clicked.connect(self.fetch_all)
+        self.copy_code_button = pill_button("复制验证码", role="secondary")
+        self.copy_code_button.clicked.connect(self.copy_selected_code)
+        self.copy_phone_button = pill_button("复制手机号", role="secondary")
+        self.copy_phone_button.clicked.connect(self.copy_selected_phone)
+        self.copy_sms_button = pill_button("复制短信", role="secondary")
+        self.copy_sms_button.clicked.connect(self.copy_selected_sms)
+        self.clear_button = pill_button("清空列表", role="danger")
+        self.clear_button.clicked.connect(self.clear_records)
+        for button in (
+            self.load_button,
+            self.import_button,
+            self.fetch_selected_button,
+            self.fetch_all_button,
+            self.copy_code_button,
+            self.copy_phone_button,
+            self.copy_sms_button,
+            self.clear_button,
+        ):
+            button.setFixedHeight(38)
+            actions.addWidget(button)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        self.search = QtWidgets.QLineEdit()
+        self.search.setObjectName("SearchField")
+        self.search.setPlaceholderText("搜索手机号、验证码、短信内容或状态")
+        self.search.setClearButtonEnabled(True)
+        self.search.textChanged.connect(self.refresh_table)
+        layout.addWidget(self.search)
+
+        progress_card = QtWidgets.QFrame()
+        progress_card.setObjectName("PhoneProgressCard")
+        progress_layout = QtWidgets.QVBoxLayout(progress_card)
+        progress_layout.setContentsMargins(14, 10, 14, 10)
+        progress_layout.setSpacing(7)
+
+        progress_line = QtWidgets.QHBoxLayout()
+        progress_line.setSpacing(8)
+        progress_title = QtWidgets.QLabel("取码进度")
+        progress_title.setObjectName("PhoneProgressTitle")
+        progress_line.addWidget(progress_title)
+
+        self.status_label = QtWidgets.QLabel("等待导入")
+        self.status_label.setObjectName("PhoneProgressText")
+        self.status_label.setMaximumHeight(18)
+        progress_line.addWidget(self.status_label, 1)
+
+        self.progress_percent = QtWidgets.QLabel("0%")
+        self.progress_percent.setObjectName("PhoneProgressPercent")
+        self.progress_percent.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.progress_percent.setFixedHeight(24)
+        self.progress_percent.setMinimumWidth(54)
+        progress_line.addWidget(self.progress_percent)
+        progress_layout.addLayout(progress_line)
+
+        self.progress_bar = QtWidgets.QProgressBar()
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFixedHeight(10)
+        progress_layout.addWidget(self.progress_bar)
+        layout.addWidget(progress_card)
+
+        self.table = QtWidgets.QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["手机号", "验证码", "来码时间", "API到期", "状态", "短信内容"])
+        self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(5, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        self.table.verticalHeader().setDefaultSectionSize(42)
+        self.table.setAlternatingRowColors(True)
+        layout.addWidget(self.table, 1)
+        self.refresh_table()
+        if self.records:
+            self.status_label.setText(f"已加载 {len(self.records)} 个手机号")
+
+    def load_file(self) -> None:
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "选择手机号文本",
+            "",
+            "Text files (*.txt *.csv);;All files (*.*)",
+        )
+        if path:
+            self.editor.setPlainText(Path(path).read_text(encoding="utf-8", errors="ignore"))
+
+    def import_phones(self) -> None:
+        records, invalid = parse_phone_import_text(self.editor.toPlainText())
+        if not records:
+            QtWidgets.QMessageBox.warning(self, "没有手机号", "没有识别到有效手机号。")
+            return
+        added, updated, skipped = self.store.upsert_records(records)
+        self.records = self.store.as_dict()
+        self.editor.clear()
+        self.refresh_table()
+        self.status_label.setText(f"导入完成：新增 {added}，更新 {updated}，重复 {skipped}，无效 {invalid}")
+
+    def filtered_phone_numbers(self) -> list[str]:
+        needle = self.search.text().strip().lower()
+        numbers = sorted(self.records.keys(), key=str.lower)
+        if not needle:
+            return numbers
+        matched: list[str] = []
+        for number in numbers:
+            record = self.records[number]
+            result = self.results.get(number, {})
+            haystack = " ".join(
+                [
+                    number,
+                    record.api_url,
+                    record.last_status,
+                    result.get("code", ""),
+                    result.get("sms_content", ""),
+                    result.get("preview", ""),
+                    result.get("code_time", ""),
+                    result.get("expired_date", ""),
+                ]
+            ).lower()
+            if needle in haystack:
+                matched.append(number)
+        return matched
+
+    def refresh_table(self) -> None:
+        current_numbers = set(self.selected_phone_numbers())
+        self.visible_phones = self.filtered_phone_numbers()
+        self.table.setRowCount(len(self.visible_phones))
+        for row_index, number in enumerate(self.visible_phones):
+            record = self.records[number]
+            result = self.results.get(number, {})
+            content = result.get("sms_content") or result.get("preview", "")
+            values = [
+                number,
+                result.get("code", record.last_code) or "",
+                result.get("code_time", result.get("time", "")) or "",
+                result.get("expired_date", "") or "",
+                record.last_status,
+                compact_text(content, 160),
+            ]
+            for col, value in enumerate(values):
+                item = QtWidgets.QTableWidgetItem(value)
+                item.setData(QtCore.Qt.ItemDataRole.UserRole, number)
+                item.setToolTip(record.api_url if col == 0 else (content if col == 5 else value))
+                self.table.setItem(row_index, col, item)
+            if number in current_numbers:
+                self.table.selectRow(row_index)
+        if self.visible_phones and not self.table.selectionModel().hasSelection():
+            self.table.selectRow(0)
+
+    def selected_phone_numbers(self) -> list[str]:
+        rows = self.table.selectionModel().selectedRows() if self.table.selectionModel() else []
+        numbers: list[str] = []
+        for index in rows:
+            item = self.table.item(index.row(), 0)
+            number = item.data(QtCore.Qt.ItemDataRole.UserRole) if item else ""
+            if number and number not in numbers:
+                numbers.append(str(number))
+        if not numbers and self.table.currentRow() >= 0:
+            item = self.table.item(self.table.currentRow(), 0)
+            number = item.data(QtCore.Qt.ItemDataRole.UserRole) if item else ""
+            if number:
+                numbers.append(str(number))
+        return numbers
+
+    def fetch_selected(self) -> None:
+        numbers = self.selected_phone_numbers()
+        if not numbers:
+            QtWidgets.QMessageBox.information(self, "请选择手机号", "请先在列表里选中要取码的手机号。")
+            return
+        self.start_fetch(numbers)
+
+    def fetch_all(self) -> None:
+        if not self.records:
+            QtWidgets.QMessageBox.information(self, "没有手机号", "请先导入手机号和 API。")
+            return
+        self.start_fetch(self.filtered_phone_numbers() or list(self.records.keys()))
+
+    def start_fetch(self, numbers: list[str]) -> None:
+        if self.worker and self.worker.isRunning():
+            return
+        phones = [self.records[number] for number in numbers if number in self.records]
+        if not phones:
+            return
+        for phone in phones:
+            phone.last_status = "取码中"
+            self.store.mark_fetch_result(phone.phone, "取码中", code=phone.last_code, message=phone.last_message, save=False)
+        self.store.save()
+        self.records = self.store.as_dict()
+        self.refresh_table()
+        self.progress_bar.setRange(0, len(phones))
+        self.progress_bar.setValue(0)
+        self.progress_percent.setText("0%")
+        self.status_label.setText(f"正在取码：0/{len(phones)}")
+        self.set_fetching(True)
+        self.worker = StandalonePhoneCodeWorker(phones, self)
+        self.worker.result_ready.connect(self.on_code_result)
+        self.worker.error_ready.connect(self.on_code_error)
+        self.worker.progress_changed.connect(self.on_progress)
+        self.worker.finished_summary.connect(self.on_fetch_finished)
+        self.worker.finished.connect(self.on_worker_finished)
+        self.worker.start()
+
+    def on_code_result(self, phone_number: str, row: object) -> None:
+        data = dict(row)
+        record = self.records.get(phone_number)
+        if not record:
+            return
+        code = data.get("code", "")
+        content = data.get("sms_content") or data.get("preview", "")
+        record.last_status = "成功" if code else "未识别验证码"
+        record.last_code = code
+        record.last_message = content[:500]
+        self.store.mark_fetch_result(phone_number, record.last_status, code=code, message=content)
+        self.records = self.store.as_dict()
+        self.results[phone_number] = data
+        self.refresh_table()
+
+    def on_code_error(self, phone_number: str, error: str) -> None:
+        record = self.records.get(phone_number)
+        if not record:
+            return
+        record.last_status = f"失败：{error[:80]}"
+        record.last_message = error[:500]
+        self.store.mark_fetch_result(phone_number, record.last_status, message=error)
+        self.records = self.store.as_dict()
+        self.results[phone_number] = {"code": "", "sms_content": error, "preview": error}
+        self.refresh_table()
+
+    def on_progress(self, done: int, total: int) -> None:
+        self.progress_bar.setRange(0, max(total, 1))
+        self.progress_bar.setValue(done)
+        percent = int((done / max(total, 1)) * 100)
+        self.progress_percent.setText(f"{percent}%")
+        self.status_label.setText(f"正在取码：{done}/{total}")
+
+    def on_fetch_finished(self, success: int, total: int) -> None:
+        self.status_label.setText(f"取码完成：成功 {success}/{total}")
+        self.progress_bar.setRange(0, max(total, 1))
+        self.progress_bar.setValue(total)
+        self.progress_percent.setText("100%")
+
+    def on_worker_finished(self) -> None:
+        worker = self.worker
+        self.worker = None
+        self.set_fetching(False)
+        if worker is not None:
+            worker.deleteLater()
+
+    def copy_selected_code(self) -> None:
+        for number in self.selected_phone_numbers():
+            code = self.results.get(number, {}).get("code") or self.records[number].last_code
+            if code:
+                QtWidgets.QApplication.clipboard().setText(code)
+                self.status_label.setText(f"已复制验证码：{code}")
+                return
+        self.status_label.setText("当前选中手机号没有可复制的验证码")
+
+    def copy_selected_phone(self) -> None:
+        numbers = self.selected_phone_numbers()
+        if not numbers:
+            self.status_label.setText("请先选中要复制的手机号")
+            return
+        phone = phone_without_country_code(numbers[0])
+        if not phone:
+            self.status_label.setText("当前选中手机号无法识别")
+            return
+        QtWidgets.QApplication.clipboard().setText(phone)
+        self.status_label.setText(f"已复制手机号：{phone}")
+
+    def copy_selected_sms(self) -> None:
+        for number in self.selected_phone_numbers():
+            content = self.results.get(number, {}).get("sms_content") or self.results.get(number, {}).get("preview", "")
+            if content:
+                QtWidgets.QApplication.clipboard().setText(content)
+                self.status_label.setText(f"已复制短信内容：{number}")
+                return
+        self.status_label.setText("当前选中手机号没有可复制的短信内容")
+
+    def clear_records(self) -> None:
+        if self.worker and self.worker.isRunning():
+            return
+        self.store.clear()
+        self.records = self.store.as_dict()
+        self.results.clear()
+        self.refresh_table()
+        self.progress_bar.setValue(0)
+        self.progress_percent.setText("0%")
+        self.status_label.setText("已清空列表")
+
+    def set_fetching(self, fetching: bool) -> None:
+        for button in (
+            self.load_button,
+            self.import_button,
+            self.fetch_selected_button,
+            self.fetch_all_button,
+            self.clear_button,
+        ):
+            button.setDisabled(fetching)
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        if self.worker and self.worker.isRunning():
+            self.status_label.setText("正在取码，请等待当前任务完成后再关闭。")
+            event.ignore()
+            return
+        super().closeEvent(event)
 
 
 class PhoneDialog(QtWidgets.QDialog):

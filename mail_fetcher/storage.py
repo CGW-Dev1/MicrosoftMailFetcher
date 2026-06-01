@@ -364,6 +364,98 @@ class PhoneStore:
             self.account_store.save()
 
 
+class StandalonePhoneCodeStore:
+    def __init__(self) -> None:
+        self.path = app_data_dir() / "standalone_phones.sec"
+        self.secure_file = EncryptedTextFile(self.path)
+        self.lock = threading.RLock()
+        self.phones: list[PhoneRecord] = []
+        self.load()
+
+    def load(self) -> None:
+        try:
+            text = self.secure_file.read_text() if self.path.exists() else ""
+            if not text:
+                self.phones = []
+                return
+            data = json.loads(text)
+            self.phones = [PhoneRecord(**self._normalize(item)) for item in data.get("phones", [])]
+            self._sort()
+        except Exception:
+            self.phones = []
+
+    def _normalize(self, item: dict) -> dict:
+        return {
+            "phone": item.get("phone", ""),
+            "api_url": item.get("api_url", ""),
+            "emails": [],
+            "imported_at": item.get("imported_at") or datetime.now(timezone.utc).isoformat(),
+            "last_fetch_at": item.get("last_fetch_at", ""),
+            "last_status": item.get("last_status", "已导入"),
+            "last_code": item.get("last_code", ""),
+            "last_message": item.get("last_message", ""),
+        }
+
+    def save(self) -> None:
+        with self.lock:
+            data = {"phones": [asdict(phone) for phone in self.phones]}
+            self.secure_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+    def _sort(self) -> None:
+        self.phones.sort(key=lambda phone: phone.phone.lower())
+
+    def as_dict(self) -> dict[str, PhoneRecord]:
+        with self.lock:
+            return {phone.phone: phone for phone in self.phones}
+
+    def upsert_records(self, records: list[PhoneImportRecord]) -> tuple[int, int, int]:
+        with self.lock:
+            existing = {phone.phone: phone for phone in self.phones}
+            added = updated = skipped = 0
+            now = datetime.now(timezone.utc).isoformat()
+            for record in records:
+                phone = existing.get(record.phone)
+                if phone:
+                    if phone.api_url != record.api_url:
+                        phone.api_url = record.api_url
+                        phone.last_status = "已更新"
+                        updated += 1
+                    else:
+                        skipped += 1
+                    continue
+                phone = PhoneRecord(
+                    phone=record.phone,
+                    api_url=record.api_url,
+                    emails=[],
+                    imported_at=now,
+                    last_status="已导入",
+                )
+                self.phones.append(phone)
+                existing[phone.phone] = phone
+                added += 1
+            self._sort()
+            self.save()
+            return added, updated, skipped
+
+    def mark_fetch_result(self, phone_number: str, status: str, code: str = "", message: str = "", save: bool = True) -> None:
+        with self.lock:
+            for phone in self.phones:
+                if phone.phone != phone_number:
+                    continue
+                phone.last_status = status
+                phone.last_code = code
+                phone.last_message = message[:500]
+                phone.last_fetch_at = datetime.now(timezone.utc).isoformat()
+                if save:
+                    self.save()
+                return
+
+    def clear(self) -> None:
+        with self.lock:
+            self.phones = []
+            self.save()
+
+
 class ConfigStore:
     def __init__(self) -> None:
         self.path = app_data_dir() / "config.json"

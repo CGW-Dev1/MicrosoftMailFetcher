@@ -178,20 +178,19 @@ class SmsService:
         if response.status_code >= 400:
             raise RuntimeError(f"短信 API 请求失败 HTTP {response.status_code}: {text[:300]}")
         payload = self._json_payload(response)
-        searchable = self._searchable_text(payload, text, phone.phone)
+        fields = self._api_data_fields(payload)
+        sms_content = fields["sms_content"]
+        searchable = sms_content or self._searchable_text(payload, text, phone.phone)
         api_code = self._api_code(payload)
-        if self._has_sms8_code_field(payload):
-            code = api_code
-        else:
-            code = api_code or clean_verification_code(extract_verification_code(searchable))
+        code = api_code or clean_verification_code(extract_verification_code(searchable))
         api_message = self._api_message(payload)
         subject = code or "未识别"
-        preview_source = api_message or searchable
+        preview_source = searchable or api_message
         preview = "" if concise_mode and code else compact_text(preview_source, 900)
         return {
             "account": ", ".join(phone.emails) or phone.phone,
             "protocol": "SMS",
-            "time": fmt_dt(response.headers.get("Date", "")),
+            "time": fields["code_time"] or fmt_dt(response.headers.get("Date", "")),
             "sender": phone.phone,
             "subject": subject,
             "read": "",
@@ -200,6 +199,11 @@ class SmsService:
             "code": code,
             "concise": concise_mode,
             "phone": phone.phone,
+            "sms_content": sms_content,
+            "code_time": fields["code_time"],
+            "expired_date": fields["expired_date"],
+            "api_msg": fields["api_msg"],
+            "api_status": fields["api_status"],
         }
 
     def _json_payload(self, response: requests.Response) -> object | None:
@@ -218,11 +222,24 @@ class SmsService:
                 return code
         return clean_verification_code(str(payload.get("code_value") or payload.get("verify_code") or "").strip())
 
-    def _has_sms8_code_field(self, payload: object | None) -> bool:
+    def _api_data_fields(self, payload: object | None) -> dict[str, str]:
         if not isinstance(payload, dict):
-            return False
+            return {"sms_content": "", "code_time": "", "expired_date": "", "api_msg": "", "api_status": ""}
         data = payload.get("data")
-        return isinstance(data, dict) and "code" in data
+        sms_content = ""
+        code_time = ""
+        expired_date = ""
+        if isinstance(data, dict):
+            sms_content = str(data.get("code") or data.get("message") or data.get("content") or "").strip()
+            code_time = str(data.get("code_time") or "").strip()
+            expired_date = str(data.get("expired_date") or "").strip()
+        return {
+            "sms_content": sms_content,
+            "code_time": code_time,
+            "expired_date": expired_date,
+            "api_msg": str(payload.get("msg") or "").strip(),
+            "api_status": str(payload.get("code") or "").strip(),
+        }
 
     def _api_message(self, payload: object | None) -> str:
         if not isinstance(payload, dict):

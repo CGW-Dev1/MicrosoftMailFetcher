@@ -6,6 +6,8 @@ from datetime import datetime
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
 
+import phonenumbers
+
 from .constants import (
     ACCOUNT_CATEGORY_BANNED,
     ACCOUNT_CATEGORY_FREE,
@@ -209,3 +211,26 @@ def short_sender(sender: str) -> str:
     if "@" in sender:
         return sender.split("@", 1)[0]
     return sender or "(未知发件人)"
+
+
+def phone_without_country_code(phone_number: str) -> str:
+    text = (phone_number or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = phonenumbers.parse(text, None)
+        national = str(parsed.national_number)
+        if getattr(parsed, "italian_leading_zero", False):
+            zeros = getattr(parsed, "number_of_leading_zeros", None) or 1
+            national = ("0" * zeros) + national
+        if national:
+            return national
+    except Exception:
+        pass
+    digits = re.sub(r"\D+", "", text)
+    if text.startswith("+") and len(digits) > 3:
+        for code in sorted(phonenumbers.COUNTRY_CODE_TO_REGION_CODE, key=lambda item: len(str(item)), reverse=True):
+            prefix = str(code)
+            if digits.startswith(prefix):
+                return digits[len(prefix):] or digits
+    return digits
