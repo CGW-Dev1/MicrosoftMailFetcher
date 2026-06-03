@@ -54,6 +54,7 @@ class AccountStore:
             "client_id": item.get("client_id", ""),
             "refresh_token": item.get("refresh_token", ""),
             "phone": item.get("phone", ""),
+            "tag": item.get("tag", ""),
             "imported_at": item.get("imported_at") or datetime.now(timezone.utc).isoformat(),
             "last_fetch_at": item.get("last_fetch_at", ""),
             "last_status": item.get("last_status", "未取件"),
@@ -82,6 +83,7 @@ class AccountStore:
                     client_id=record.client_id,
                     refresh_token=record.refresh_token,
                     phone="",
+                    tag=record.tag,
                     imported_at=now,
                     last_status="已导入" if record.refresh_token else "未取件",
                     used=category != ACCOUNT_CATEGORY_UNUSED,
@@ -117,6 +119,18 @@ class AccountStore:
             if account and refresh_token and account.refresh_token != refresh_token:
                 account.refresh_token = refresh_token
                 self.save()
+
+    def set_tag(self, email_address: str, tag: str) -> bool:
+        clean = " ".join((tag or "").split())[:40]
+        with self.lock:
+            account = self.get(email_address)
+            if not account:
+                return False
+            if account.tag == clean:
+                return True
+            account.tag = clean
+            self.save()
+            return True
 
     def set_used(self, emails: set[str], used: bool) -> int:
         return self.set_category(emails, ACCOUNT_CATEGORY_PLUS if used else ACCOUNT_CATEGORY_UNUSED)

@@ -383,6 +383,17 @@ def app_stylesheet(theme: str = "light") -> str:
         border: 1px solid {border};
         padding: 8px 10px;
     }}
+    QPushButton[role="tagged"] {{
+        background: {green_soft};
+        color: {green};
+        border: 1px solid {green};
+        padding: 8px 10px;
+    }}
+    QPushButton[role="tagged"]:hover {{
+        background: {green_soft};
+        border: 1px solid {blue};
+        color: {blue};
+    }}
     QPushButton[compact="true"] {{
         padding: 3px 8px;
         border-radius: 11px;
@@ -973,6 +984,7 @@ class MainWindow(QtWidgets.QMainWindow):
         card.copy_requested.connect(self.copy_email)
         card.mail_code_requested.connect(self.fetch_account_mail_code)
         card.phone_code_requested.connect(self.fetch_account_phone_code)
+        card.tag_requested.connect(self.edit_account_tag)
         return card
 
     def toggle_all_accounts(self, checked: bool) -> None:
@@ -991,6 +1003,25 @@ class MainWindow(QtWidgets.QMainWindow):
     def copy_email(self, email_address: str) -> None:
         QtWidgets.QApplication.clipboard().setText(email_address)
         self.update_status(f"已复制邮箱：{email_address}")
+
+    def edit_account_tag(self, email_address: str) -> None:
+        account = self.account_store.get(email_address)
+        if not account:
+            self.update_status("邮箱不存在")
+            return
+        tag, ok = QtWidgets.QInputDialog.getText(
+            self,
+            "编辑标签",
+            f"为 {email_address} 设置标签：",
+            QtWidgets.QLineEdit.EchoMode.Normal,
+            account.tag,
+        )
+        if not ok:
+            return
+        clean = " ".join(tag.split())[:40]
+        if self.account_store.set_tag(email_address, clean):
+            self.refresh_accounts()
+            self.update_status(f"已更新标签：{clean or '已清除'}")
 
     def fetch_account_mail_code(self, email_address: str) -> None:
         if self.fetch_running:
@@ -1151,6 +1182,7 @@ class MainWindow(QtWidgets.QMainWindow):
             account.client_id,
             account.refresh_token,
             label,
+            account.tag,
         ]
         if account.phone:
             phone = self.phone_store.get(account.phone)

@@ -21,6 +21,7 @@ class AccountCard(ClickableFrame):
     copy_requested = QtCore.pyqtSignal(str)
     mail_code_requested = QtCore.pyqtSignal(str)
     phone_code_requested = QtCore.pyqtSignal(str)
+    tag_requested = QtCore.pyqtSignal(str)
 
     def __init__(self, account: AccountRecord, checked: bool) -> None:
         super().__init__()
@@ -52,7 +53,8 @@ class AccountCard(ClickableFrame):
         text_box.addWidget(self.email_label)
 
         phone_text = f" · {account.phone}" if account.phone else ""
-        self.meta_label = ElidedLabel(f"{account.category_label} · {account.source}{phone_text} · {account.last_status}")
+        tag_text = f" · 标签:{compact_text(account.tag, 18)}" if account.tag else ""
+        self.meta_label = ElidedLabel(f"{account.category_label} · {account.source}{phone_text}{tag_text} · {account.last_status}")
         self.meta_label.setObjectName("AccountMeta")
         self.meta_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         text_box.addWidget(self.meta_label)
@@ -75,6 +77,16 @@ class AccountCard(ClickableFrame):
         self.phone_button.setToolTip(f"获取手机号验证码：{account.phone}" if account.phone else "未绑定手机号")
         self.phone_button.clicked.connect(lambda: self.phone_code_requested.emit(self.account.email))
         layout.addWidget(self.phone_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+
+        tag_button_text = compact_text(account.tag, 6) if account.tag else "标签"
+        tag_button_role = "tagged" if account.tag else "ghost"
+        self.tag_button = pill_button(tag_button_text, role=tag_button_role)
+        self.tag_button.setFixedSize(52, 34)
+        self.tag_button.setProperty("compact", "true")
+        self.tag_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.tag_button.setToolTip(f"编辑标签：{account.tag}" if account.tag else "添加自定义标签")
+        self.tag_button.clicked.connect(lambda: self.tag_requested.emit(self.account.email))
+        layout.addWidget(self.tag_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
 
         self.copy_button = pill_button("复制", role="ghost")
         self.copy_button.setFixedSize(52, 34)

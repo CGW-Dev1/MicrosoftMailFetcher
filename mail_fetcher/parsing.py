@@ -63,14 +63,24 @@ def parse_import_text(text: str) -> tuple[list[ImportRecord], int]:
         category_index = 4
         phone = ""
         phone_api_url = ""
+        tag = ""
         if len(parts) > 4 and PHONE_RE.match(parts[4]):
             category = ACCOUNT_CATEGORY_UNUSED
             phone = parts[4]
             phone_api_url = parts[5] if len(parts) > 5 and parts[5].startswith(("http://", "https://")) else ""
         else:
             category = normalize_account_category(parts[category_index] if len(parts) > category_index else "")
-            phone = parts[5] if len(parts) > 5 and PHONE_RE.match(parts[5]) else ""
-            phone_api_url = parts[6] if len(parts) > 6 and parts[6].startswith(("http://", "https://")) else ""
+            cursor = 5
+            if len(parts) > cursor and parts[cursor] and not PHONE_RE.match(parts[cursor]) and not parts[cursor].startswith(("http://", "https://")):
+                tag = parts[cursor][:40]
+                cursor += 1
+            elif len(parts) > cursor and not parts[cursor]:
+                cursor += 1
+            if len(parts) > cursor and PHONE_RE.match(parts[cursor]):
+                phone = parts[cursor]
+                cursor += 1
+            if len(parts) > cursor and parts[cursor].startswith(("http://", "https://")):
+                phone_api_url = parts[cursor]
         records.append(
             ImportRecord(
                 email=parts[0],
@@ -78,6 +88,7 @@ def parse_import_text(text: str) -> tuple[list[ImportRecord], int]:
                 client_id=parts[2] if len(parts) > 2 else "",
                 refresh_token=parts[3] if len(parts) > 3 else "",
                 category=category,
+                tag=tag,
                 phone=phone,
                 phone_api_url=phone_api_url,
             )

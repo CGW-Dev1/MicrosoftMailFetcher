@@ -12,6 +12,7 @@ class AccountRecord:
     client_id: str = ""
     refresh_token: str = ""
     phone: str = ""
+    tag: str = ""
     imported_at: str = ""
     last_fetch_at: str = ""
     last_status: str = "未取件"
@@ -34,6 +35,7 @@ class ImportRecord:
     client_id: str = ""
     refresh_token: str = ""
     category: str = ACCOUNT_CATEGORY_UNUSED
+    tag: str = ""
     phone: str = ""
     phone_api_url: str = ""
 
