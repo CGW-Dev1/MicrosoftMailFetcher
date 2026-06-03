@@ -72,15 +72,23 @@ class CheckBox(QtWidgets.QCheckBox):
 
         rect = self.rect()
         box = QtCore.QRectF(3, (rect.height() - 24) / 2, 24, 24)
-        fill = QtGui.QColor("#dbe8ff" if self.isChecked() else "#e7f0ff")
-        border = QtGui.QColor("#2f6fed" if self.underMouse() else ("#7fa2f8" if self.isChecked() else "#9bbcff"))
+        window_color = self.palette().color(QtGui.QPalette.ColorRole.Window)
+        is_dark = window_color.lightness() < 110
+        if is_dark:
+            fill = QtGui.QColor("#274267" if self.isChecked() else "#182842")
+            border = QtGui.QColor("#6f8fb5" if self.underMouse() else ("#5f7fa8" if self.isChecked() else "#49698f"))
+            check = QtGui.QColor("#ff8a8a")
+        else:
+            fill = QtGui.QColor("#dbe8ff" if self.isChecked() else "#e7f0ff")
+            border = QtGui.QColor("#2f6fed" if self.underMouse() else ("#7fa2f8" if self.isChecked() else "#9bbcff"))
+            check = QtGui.QColor("#e25353")
 
         painter.setPen(QtGui.QPen(border, 2))
         painter.setBrush(fill)
         painter.drawRoundedRect(box, 6, 6)
 
         if self.isChecked():
-            pen = QtGui.QPen(QtGui.QColor("#e25353"), 2.6, QtCore.Qt.PenStyle.SolidLine, QtCore.Qt.PenCapStyle.RoundCap, QtCore.Qt.PenJoinStyle.RoundJoin)
+            pen = QtGui.QPen(check, 2.6, QtCore.Qt.PenStyle.SolidLine, QtCore.Qt.PenCapStyle.RoundCap, QtCore.Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)
             painter.drawLine(QtCore.QPointF(box.left() + 5.8, box.top() + 12.6), QtCore.QPointF(box.left() + 10.0, box.top() + 16.8))
             painter.drawLine(QtCore.QPointF(box.left() + 9.8, box.top() + 16.4), QtCore.QPointF(box.left() + 18.0, box.top() + 6.8))

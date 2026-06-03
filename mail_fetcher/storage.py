@@ -73,8 +73,28 @@ class AccountStore:
             added = updated = skipped = 0
             now = datetime.now(timezone.utc).isoformat()
             for record in records:
-                if existing.get(record.email.lower()):
-                    skipped += 1
+                current = existing.get(record.email.lower())
+                if current:
+                    changed = False
+                    category = normalize_account_category(record.category)
+                    updates = {
+                        "password": record.password,
+                        "client_id": record.client_id,
+                        "refresh_token": record.refresh_token,
+                        "tag": " ".join((record.tag or "").split())[:40],
+                    }
+                    for field_name, value in updates.items():
+                        if value and getattr(current, field_name) != value:
+                            setattr(current, field_name, value)
+                            changed = True
+                    if category != ACCOUNT_CATEGORY_UNUSED and current.category != category:
+                        current.category = category
+                        current.used = True
+                        changed = True
+                    if changed:
+                        updated += 1
+                    else:
+                        skipped += 1
                     continue
                 category = normalize_account_category(record.category)
                 account = AccountRecord(
@@ -83,7 +103,7 @@ class AccountStore:
                     client_id=record.client_id,
                     refresh_token=record.refresh_token,
                     phone="",
-                    tag=record.tag,
+                    tag=" ".join((record.tag or "").split())[:40],
                     imported_at=now,
                     last_status="已导入" if record.refresh_token else "未取件",
                     used=category != ACCOUNT_CATEGORY_UNUSED,

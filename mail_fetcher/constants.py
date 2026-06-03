@@ -4,7 +4,7 @@ import re
 
 APP_NAME = "OutlookHotmailMailFetcher"
 DISPLAY_NAME = "邮件验证码助手"
-APP_VERSION = "V1.7"
+APP_VERSION = "V1.8"
 
 AUTHORITY_BASE = "https://login.microsoftonline.com"
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"

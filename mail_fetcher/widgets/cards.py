@@ -27,18 +27,19 @@ class AccountCard(ClickableFrame):
         super().__init__()
         self.account = account
         self.setObjectName("AccountCard")
+        self.setProperty("selected", "true" if checked else "false")
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(54)
-        self.setMaximumHeight(54)
+        self.setMinimumHeight(78)
+        self.setMaximumHeight(78)
         self.clicked.connect(self.toggle_selection)
 
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(10, 5, 10, 5)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(10)
 
         self.checkbox = CheckBox()
         self.checkbox.setChecked(checked)
-        self.checkbox.toggled.connect(lambda value: self.selection_changed.emit(self.account.email, value))
+        self.checkbox.toggled.connect(self.on_selection_toggled)
         layout.addWidget(self.checkbox, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
 
         text_host = QtWidgets.QWidget()
@@ -61,42 +62,57 @@ class AccountCard(ClickableFrame):
 
         layout.addWidget(text_host, 1)
 
-        self.mail_button = pill_button("邮箱", role="accent")
-        self.mail_button.setFixedSize(52, 34)
+        actions_host = QtWidgets.QWidget()
+        actions_host.setFixedWidth(116)
+        actions_host.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
+        actions = QtWidgets.QGridLayout(actions_host)
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setHorizontalSpacing(8)
+        actions.setVerticalSpacing(6)
+
+        self.mail_button = pill_button("邮箱", role="mini-action")
+        self.mail_button.setFixedSize(54, 28)
         self.mail_button.setProperty("compact", "true")
         self.mail_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         self.mail_button.setToolTip(f"获取邮箱验证码：{account.email}")
         self.mail_button.clicked.connect(lambda: self.mail_code_requested.emit(self.account.email))
-        layout.addWidget(self.mail_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        actions.addWidget(self.mail_button, 0, 1)
 
-        self.phone_button = pill_button("手机", role="accent")
-        self.phone_button.setFixedSize(52, 34)
+        self.phone_button = pill_button("手机", role="mini-action")
+        self.phone_button.setFixedSize(54, 28)
         self.phone_button.setProperty("compact", "true")
         self.phone_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         self.phone_button.setEnabled(bool(account.phone))
         self.phone_button.setToolTip(f"获取手机号验证码：{account.phone}" if account.phone else "未绑定手机号")
         self.phone_button.clicked.connect(lambda: self.phone_code_requested.emit(self.account.email))
-        layout.addWidget(self.phone_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        actions.addWidget(self.phone_button, 0, 0)
 
         tag_button_text = compact_text(account.tag, 6) if account.tag else "标签"
-        tag_button_role = "tagged" if account.tag else "ghost"
+        tag_button_role = "tagged" if account.tag else "mini-action"
         self.tag_button = pill_button(tag_button_text, role=tag_button_role)
-        self.tag_button.setFixedSize(52, 34)
+        self.tag_button.setFixedSize(54, 28)
         self.tag_button.setProperty("compact", "true")
         self.tag_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         self.tag_button.setToolTip(f"编辑标签：{account.tag}" if account.tag else "添加自定义标签")
         self.tag_button.clicked.connect(lambda: self.tag_requested.emit(self.account.email))
-        layout.addWidget(self.tag_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        actions.addWidget(self.tag_button, 1, 0)
 
-        self.copy_button = pill_button("复制", role="ghost")
-        self.copy_button.setFixedSize(52, 34)
+        self.copy_button = pill_button("复制", role="mini-action")
+        self.copy_button.setFixedSize(54, 28)
         self.copy_button.setProperty("compact", "true")
         self.copy_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
         self.copy_button.clicked.connect(lambda: self.copy_requested.emit(self.account.email))
-        layout.addWidget(self.copy_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        actions.addWidget(self.copy_button, 1, 1)
+        layout.addWidget(actions_host, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
 
     def toggle_selection(self) -> None:
         self.checkbox.setChecked(not self.checkbox.isChecked())
+
+    def on_selection_toggled(self, value: bool) -> None:
+        self.setProperty("selected", "true" if value else "false")
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.selection_changed.emit(self.account.email, value)
 
 
 class MailCard(ClickableFrame):
