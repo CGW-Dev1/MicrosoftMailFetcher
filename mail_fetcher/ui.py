@@ -22,7 +22,7 @@ from .models import AccountRecord, ImportRecord, PhoneImportRecord
 from .parsing import clean_verification_code, compact_text
 from .services import MailService
 from .storage import AccountStore, ConfigStore, PhoneStore
-from .widgets import AccountCard, BadgeLabel, CheckBox, CountSelector, FlowLayout, MailCard, SearchField, pill_button
+from .widgets import AccountCard, BadgeLabel, CheckBox, CountSelector, MailCard, SearchField, pill_button
 from .workers import FetchWorker
 
 SURFACE = "#ffffff"
@@ -69,6 +69,10 @@ def app_stylesheet(theme: str = "light") -> str:
         cyan_soft = "#123044"
         cyan_text = "#62c7ff"
         blue_soft = "#1b3158"
+        purple = "#9f7cff"
+        purple_soft = "#2b2450"
+        amber = "#f0b45f"
+        amber_soft = "#3a2b1b"
         red_soft = "#3d2427"
         red = "#ff7a7a"
         tab_bg = "#22324a"
@@ -93,6 +97,10 @@ def app_stylesheet(theme: str = "light") -> str:
         cyan_soft = CYAN_SOFT
         cyan_text = CYAN_TEXT
         blue_soft = BLUE_SOFT
+        purple = "#7c5cff"
+        purple_soft = "#ede8ff"
+        amber = "#c97912"
+        amber_soft = "#fff1d6"
         red_soft = RED_SOFT
         red = RED
         tab_bg = "#edf3fb"
@@ -122,7 +130,7 @@ def app_stylesheet(theme: str = "light") -> str:
         background: {bg};
         color: {text};
     }}
-    QFrame#HeaderCard, QFrame#SidebarCard, QFrame#ControlsCard, QFrame#ProgressCard, QFrame#PhoneProgressCard, QFrame#MailCard, QFrame#AccountCard, QFrame#StatCard {{
+    QFrame#HeaderCard, QFrame#AccountToolsCard, QFrame#SidebarCard, QFrame#WorkspaceCard, QFrame#ControlsCard, QFrame#ProgressCard, QFrame#PhoneProgressCard, QFrame#MailCard, QFrame#AccountCard, QFrame#StatCard {{
         background: {surface};
         border: 1px solid {border};
         border-radius: 14px;
@@ -130,7 +138,10 @@ def app_stylesheet(theme: str = "light") -> str:
     QFrame#HeaderCard {{
         background: {surface};
     }}
-    QFrame#ControlsCard, QFrame#ProgressCard {{
+    QFrame#AccountToolsCard {{
+        background: {surface};
+    }}
+    QFrame#WorkspaceCard, QFrame#ControlsCard, QFrame#ProgressCard {{
         background: {surface};
     }}
     QFrame#AccountCard:hover, QFrame#MailCard:hover {{
@@ -293,7 +304,7 @@ def app_stylesheet(theme: str = "light") -> str:
         background: {blue_soft};
         color: {blue};
     }}
-    QLineEdit#SearchField, QPlainTextEdit#ImportEditor, QTextEdit#DetailViewer, QComboBox#CountCombo {{
+    QLineEdit#SearchField, QPlainTextEdit#ImportEditor, QTextEdit#DetailViewer, QComboBox#CountCombo, QComboBox#MoveCombo {{
         background: {surface};
         border: 1px solid {border};
         border-radius: 11px;
@@ -307,7 +318,7 @@ def app_stylesheet(theme: str = "light") -> str:
         background: {surface};
         color: {text};
     }}
-    QLineEdit#SearchField:focus, QPlainTextEdit#ImportEditor:focus, QTextEdit#DetailViewer:focus, QComboBox#CountCombo:focus {{
+    QLineEdit#SearchField:focus, QPlainTextEdit#ImportEditor:focus, QTextEdit#DetailViewer:focus, QComboBox#CountCombo:focus, QComboBox#MoveCombo:focus {{
         border: 1px solid {focus_border};
     }}
     QTableWidget {{
@@ -333,6 +344,12 @@ def app_stylesheet(theme: str = "light") -> str:
         min-height: 24px;
         font-weight: 600;
     }}
+    QComboBox#MoveCombo {{
+        padding-right: 30px;
+        min-height: 20px;
+        font-weight: 600;
+        color: {blue};
+    }}
     QLabel#BoundEmailText {{
         color: {text};
         font-size: 13px;
@@ -350,108 +367,123 @@ def app_stylesheet(theme: str = "light") -> str:
         background: {blue_soft};
         border: 1px solid {border};
     }}
-    QComboBox#CountCombo::drop-down {{
+    QComboBox#CountCombo::drop-down, QComboBox#MoveCombo::drop-down {{
         subcontrol-origin: padding;
         subcontrol-position: top right;
         width: 24px;
         border: none;
         background: transparent;
     }}
-    QComboBox#CountCombo::down-arrow {{
+    QComboBox#CountCombo::down-arrow, QComboBox#MoveCombo::down-arrow {{
         width: 12px;
         height: 12px;
     }}
     QPushButton {{
+        background: {surface};
+        color: {text};
+        border: 1px solid {border};
         border-radius: 11px;
         padding: 8px 14px;
         font-weight: 600;
-        border: 1px solid transparent;
+        outline: none;
     }}
     QPushButton[role="primary"] {{
-        background: {blue};
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {blue}, stop:1 {blue_dark});
         color: white;
+        border: 1px solid {border};
     }}
     QPushButton[role="primary"]:hover {{
         background: {blue_dark};
+        border: 1px solid {border};
+    }}
+    QPushButton[role="primary"]:pressed {{
+        background: {blue_dark};
     }}
     QPushButton[role="secondary"] {{
-        background: {surface};
+        background: {surface_soft};
         color: {text};
         border: 1px solid {border};
     }}
     QPushButton[role="secondary"]:hover {{
-        border: 1px solid {focus_border};
+        background: {blue_soft};
+        border: 1px solid {border};
         color: {blue};
     }}
     QPushButton[role="accent"] {{
         background: {blue_soft};
         color: {blue};
-        border: 1px solid transparent;
+        border: 1px solid {border};
     }}
     QPushButton[role="accent"]:hover {{
         background: {accent_hover};
+        border: 1px solid {border};
     }}
     QPushButton[role="tool"] {{
-        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {surface}, stop:1 {blue_soft});
-        color: {text};
+        background: {cyan_soft};
+        color: {cyan_text};
         border: 1px solid {border};
-        border-bottom: 2px solid {focus_border};
         border-radius: 12px;
         padding: 7px 10px;
     }}
     QPushButton[role="tool"]:hover {{
-        color: {blue};
-        border: 1px solid {focus_border};
-        border-bottom: 2px solid {blue};
-        background: {blue_soft};
+        background: {cyan_text};
+        color: white;
+        border: 1px solid {border};
     }}
     QPushButton[role="tool"]:pressed {{
-        background: {accent_hover};
-        padding-top: 8px;
-        padding-bottom: 6px;
+        background: {cyan_text};
     }}
     QPushButton[role="danger"] {{
         background: {red_soft};
         color: {red};
+        border: 1px solid {border};
+    }}
+    QPushButton[role="danger"]:hover {{
+        background: {red};
+        color: white;
+        border: 1px solid {border};
     }}
     QPushButton[role="move"] {{
-        background: {surface};
-        color: {blue};
+        background: {amber_soft};
+        color: {amber};
         border: 1px solid {border};
-        border-left: 4px solid {blue_soft};
         border-radius: 12px;
         padding: 7px 10px;
     }}
     QPushButton[role="move"]:hover {{
-        background: {blue_soft};
-        border: 1px solid {focus_border};
-        border-left: 4px solid {blue};
-        color: {blue};
+        background: {amber};
+        border: 1px solid {border};
+        color: white;
+    }}
+    QPushButton[role="move"]:pressed {{
+        background: {amber};
     }}
     QPushButton[role="move-danger"] {{
-        background: {surface};
+        background: {red_soft};
         color: {red};
         border: 1px solid {border};
-        border-left: 4px solid {red_soft};
         border-radius: 12px;
         padding: 7px 10px;
     }}
     QPushButton[role="move-danger"]:hover {{
-        background: {red_soft};
-        border: 1px solid {focus_border};
-        border-left: 4px solid {red};
+        background: {red};
+        color: white;
+        border: 1px solid {border};
+    }}
+    QPushButton[role="move-danger"]:pressed {{
+        background: {red};
     }}
     QPushButton[role="mini-action"] {{
-        background: {surface};
-        color: {blue};
+        background: {purple_soft};
+        color: {purple};
         border: 1px solid {border};
         border-radius: 10px;
         padding: 3px 8px;
     }}
     QPushButton[role="mini-action"]:hover {{
-        background: {blue_soft};
-        border: 1px solid {focus_border};
-        color: {blue};
+        background: {purple};
+        border: 1px solid {border};
+        color: white;
     }}
     QPushButton[role="ghost"] {{
         background: {surface};
@@ -462,13 +494,13 @@ def app_stylesheet(theme: str = "light") -> str:
     QPushButton[role="tagged"] {{
         background: {green_soft};
         color: {green};
-        border: 1px solid {green};
+        border: 1px solid {border};
         padding: 8px 10px;
     }}
     QPushButton[role="tagged"]:hover {{
         background: {green_soft};
-        border: 1px solid {focus_border};
-        color: {blue};
+        border: 1px solid {border};
+        color: {green};
     }}
     QPushButton[compact="true"] {{
         padding: 3px 8px;
@@ -493,38 +525,42 @@ def app_stylesheet(theme: str = "light") -> str:
         padding: 0;
     }}
     QPushButton[role="tab"] {{
-        background: {tab_bg};
-        color: {text};
-        border: 1px solid transparent;
+        background: {surface};
+        color: {blue};
+        border: 1px solid {border};
         border-radius: 12px;
         padding: 8px 10px;
     }}
     QPushButton[role="tab"]:checked {{
         background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {blue}, stop:1 {blue_dark});
         color: white;
-        border: 1px solid {blue_dark};
-        border-bottom: 4px solid {blue_dark};
+        border: 1px solid {border};
     }}
-    QPushButton[role="tab"]:hover, QPushButton[role="protocol"]:hover {{
-        border: 1px solid {focus_border};
+    QPushButton[role="tab"]:hover {{
+        background: {blue_soft};
+        border: 1px solid {border};
     }}
     QPushButton[role="protocol"] {{
-        background: {tab_bg};
-        color: {text};
-        border: 1px solid transparent;
+        background: {purple_soft};
+        color: {purple};
+        border: 1px solid {border};
         border-radius: 12px;
         padding: 8px 12px;
     }}
     QPushButton[role="protocol"]:checked {{
-        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {blue}, stop:1 {blue_dark});
+        background: {purple};
         color: white;
-        border: 1px solid {blue_dark};
-        border-bottom: 4px solid {blue_dark};
+        border: 1px solid {border};
+    }}
+    QPushButton[role="protocol"]:hover {{
+        background: {purple};
+        color: white;
+        border: 1px solid {border};
     }}
     QPushButton:disabled {{
         background: {disabled_bg};
         color: {disabled_text};
-        border-color: transparent;
+        border: 1px solid {border};
     }}
     QProgressBar {{
         background: {tab_bg};
@@ -544,12 +580,12 @@ def app_stylesheet(theme: str = "light") -> str:
     QWidget#AccountContainer {{
         background: {surface_soft};
     }}
-    QScrollArea#ResultScroll QWidget#ResultViewport,
-    QWidget#ResultContainer {{
-        background: {surface};
-    }}
     QScrollArea#AccountScroll,
     QScrollArea#ResultScroll {{
+        background: transparent;
+    }}
+    QScrollArea#ResultScroll QWidget#ResultViewport,
+    QWidget#ResultContainer {{
         background: transparent;
     }}
     QScrollBar:vertical {{
@@ -635,14 +671,14 @@ class MainWindow(QtWidgets.QMainWindow):
         body.setChildrenCollapsible(False)
         outer.addWidget(body, 1)
 
-        self.sidebar = self.make_sidebar()
+        self.sidebar = self.make_left_panel()
         body.addWidget(self.sidebar)
 
         self.main_panel = self.make_main_panel()
         body.addWidget(self.main_panel)
-        body.setStretchFactor(0, 4)
-        body.setStretchFactor(1, 6)
-        body.setSizes([540, 980])
+        body.setStretchFactor(0, 3)
+        body.setStretchFactor(1, 7)
+        body.setSizes([470, 1050])
 
     def make_header(self, icon_path: Path) -> QtWidgets.QFrame:
         frame = QtWidgets.QFrame()
@@ -703,11 +739,53 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.status_label, 0, QtCore.Qt.AlignmentFlag.AlignTop)
         return frame
 
+    def make_left_panel(self) -> QtWidgets.QWidget:
+        panel = QtWidgets.QWidget()
+        panel.setMinimumWidth(380)
+        panel.setMaximumWidth(760)
+        panel.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Expanding)
+
+        layout = QtWidgets.QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        layout.addWidget(self.make_account_tools_card())
+        layout.addWidget(self.make_sidebar(), 1)
+        return panel
+
+    def make_account_tools_card(self) -> QtWidgets.QFrame:
+        frame = QtWidgets.QFrame()
+        frame.setObjectName("AccountToolsCard")
+        layout = QtWidgets.QVBoxLayout(frame)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+
+        title = QtWidgets.QLabel("账号操作")
+        title.setObjectName("SectionTitle")
+        layout.addWidget(title)
+
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(8)
+        tools = (
+            ("导入邮箱", self.open_import_dialog),
+            ("导出邮箱", self.export_accounts),
+            ("手机号管理", self.open_phone_dialog),
+            ("手机号取码", self.open_standalone_phone_code_dialog),
+        )
+        for text, handler in tools:
+            button = pill_button(text, role="tool")
+            button.setFixedHeight(36)
+            button.setMinimumWidth(0)
+            button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+            button.clicked.connect(handler)
+            row.addWidget(button, 1)
+        layout.addLayout(row)
+        return frame
+
     def make_sidebar(self) -> QtWidgets.QFrame:
         frame = QtWidgets.QFrame()
         frame.setObjectName("SidebarCard")
-        frame.setMinimumWidth(400)
-        frame.setMaximumWidth(900)
+        frame.setMinimumWidth(380)
+        frame.setMaximumWidth(760)
         frame.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Expanding)
 
         layout = QtWidgets.QVBoxLayout(frame)
@@ -747,55 +825,46 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addLayout(group_line)
         self.update_account_group_buttons()
 
-        mailbox_tools_line = QtWidgets.QHBoxLayout()
-        mailbox_tools_line.setSpacing(8)
-        import_button = pill_button("导入邮箱", role="tool")
-        import_button.clicked.connect(self.open_import_dialog)
-        export_button = pill_button("导出邮箱", role="tool")
-        export_button.clicked.connect(self.export_accounts)
-        phone_button = pill_button("手机号管理", role="tool")
-        phone_button.clicked.connect(self.open_phone_dialog)
-        phone_code_button = pill_button("手机号取码", role="tool")
-        phone_code_button.clicked.connect(self.open_standalone_phone_code_dialog)
-        for button in (import_button, export_button, phone_button, phone_code_button):
-            button.setFixedHeight(38)
-            button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-            mailbox_tools_line.addWidget(button, 1)
-        layout.addLayout(mailbox_tools_line)
-
-        select_line = QtWidgets.QHBoxLayout()
-        select_line.setSpacing(8)
+        list_action_line = QtWidgets.QHBoxLayout()
+        list_action_line.setSpacing(8)
         self.select_all_box = CheckBox("全选")
-        self.select_all_box.setFixedHeight(38)
+        self.select_all_box.setFixedSize(76, 36)
         self.select_all_box.setChecked(True)
         self.select_all_box.toggled.connect(self.toggle_all_accounts)
-        select_line.addWidget(self.select_all_box)
-        select_line.addStretch(1)
+        list_action_line.addWidget(self.select_all_box)
+
+        clear_button = pill_button("清空全部", role="secondary")
+        clear_button.setFixedHeight(36)
+        clear_button.clicked.connect(self.clear_accounts)
+        clear_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        list_action_line.addWidget(clear_button, 1)
+
         delete_button = pill_button("删除选中", role="danger")
         delete_button.clicked.connect(self.remove_selected)
-        delete_button.setFixedHeight(38)
-        select_line.addWidget(delete_button)
-        layout.addLayout(select_line)
+        delete_button.setFixedHeight(36)
+        delete_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        list_action_line.addWidget(delete_button, 1)
+        layout.addLayout(list_action_line)
 
-        usage_line = QtWidgets.QHBoxLayout()
-        usage_line.setSpacing(8)
-        mark_plus_button = pill_button("Plus", role="move")
-        mark_plus_button.setToolTip("标记选中邮箱为 Plus")
-        mark_plus_button.clicked.connect(lambda: self.set_selected_category(ACCOUNT_CATEGORY_PLUS))
-        mark_free_button = pill_button("Free", role="move")
-        mark_free_button.setToolTip("标记选中邮箱为 Free")
-        mark_free_button.clicked.connect(lambda: self.set_selected_category(ACCOUNT_CATEGORY_FREE))
-        mark_banned_button = pill_button("封禁", role="move-danger")
-        mark_banned_button.setToolTip("标记选中邮箱为已封禁")
-        mark_banned_button.clicked.connect(lambda: self.set_selected_category(ACCOUNT_CATEGORY_BANNED))
-        unmark_button = pill_button("未使用", role="move")
-        unmark_button.setToolTip("将选中邮箱移回未使用")
-        unmark_button.clicked.connect(lambda: self.set_selected_category(ACCOUNT_CATEGORY_UNUSED))
-        for button in (mark_plus_button, mark_free_button, mark_banned_button, unmark_button):
-            button.setFixedHeight(38)
+        move_line = QtWidgets.QHBoxLayout()
+        move_line.setSpacing(8)
+        move_label = QtWidgets.QLabel("选中移动到")
+        move_label.setObjectName("ProgressText")
+        move_label.setFixedWidth(72)
+        move_line.addWidget(move_label, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        move_targets = (
+            ("Plus", ACCOUNT_CATEGORY_PLUS, "move"),
+            ("Free", ACCOUNT_CATEGORY_FREE, "move"),
+            ("封禁", ACCOUNT_CATEGORY_BANNED, "move-danger"),
+            ("未使用", ACCOUNT_CATEGORY_UNUSED, "move"),
+        )
+        for text, category, role in move_targets:
+            button = pill_button(text, role=role)
+            button.setFixedHeight(36)
             button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-            usage_line.addWidget(button)
-        layout.addLayout(usage_line)
+            button.clicked.connect(lambda checked=False, value=category: self.set_selected_category(value))
+            move_line.addWidget(button, 1)
+        layout.addLayout(move_line)
 
         self.account_scroll = QtWidgets.QScrollArea()
         self.account_scroll.setObjectName("AccountScroll")
@@ -810,27 +879,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.account_layout.addStretch(1)
         self.account_scroll.setWidget(self.account_container)
         layout.addWidget(self.account_scroll, 1)
-
-        footer = QtWidgets.QHBoxLayout()
-        clear_button = pill_button("清空全部", role="secondary")
-        clear_button.setFixedHeight(38)
-        clear_button.clicked.connect(self.clear_accounts)
-        footer.addWidget(clear_button)
-        footer.addStretch(1)
-        layout.addLayout(footer)
         return frame
 
     def make_main_panel(self) -> QtWidgets.QWidget:
         panel = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
 
-        controls = QtWidgets.QFrame()
-        controls.setObjectName("ControlsCard")
-        controls_layout = QtWidgets.QVBoxLayout(controls)
-        controls_layout.setContentsMargins(16, 10, 16, 10)
-        controls_layout.setSpacing(8)
+        workspace = QtWidgets.QFrame()
+        workspace.setObjectName("WorkspaceCard")
+        workspace_layout = QtWidgets.QVBoxLayout(workspace)
+        workspace_layout.setContentsMargins(16, 12, 16, 12)
+        workspace_layout.setSpacing(10)
 
         top_row = QtWidgets.QHBoxLayout()
         top_row.setSpacing(12)
@@ -844,9 +905,10 @@ class MainWindow(QtWidgets.QMainWindow):
         top_row.addWidget(self.sender_search, 2)
         self.count_card = self.make_count_card()
         top_row.addWidget(self.count_card, 0, QtCore.Qt.AlignmentFlag.AlignRight)
-        controls_layout.addLayout(top_row)
+        workspace_layout.addLayout(top_row)
 
-        toolbar_row = FlowLayout(h_spacing=8, v_spacing=8)
+        toolbar_row = QtWidgets.QHBoxLayout()
+        toolbar_row.setSpacing(10)
         self.imap_button = pill_button("IMAP令牌", role="protocol", checkable=True)
         self.graph_button = pill_button("Graph令牌", role="protocol", checkable=True)
         self.imap_button.clicked.connect(lambda: self.set_protocol("IMAP"))
@@ -855,7 +917,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         export_csv_button = pill_button("导出CSV", role="tool")
         export_csv_button.clicked.connect(self.export_csv)
-        self.stop_button = pill_button("停止", role="tool")
+        self.stop_button = pill_button("停止", role="danger")
         self.stop_button.clicked.connect(self.request_stop)
         self.fetch_selected_button = pill_button("选中取件", role="tool")
         self.fetch_selected_button.clicked.connect(self.fetch_selected)
@@ -866,22 +928,20 @@ class MainWindow(QtWidgets.QMainWindow):
 
         for button in toolbar_buttons:
             self.prepare_toolbar_button(button)
-            toolbar_row.addWidget(button)
-
-        controls_layout.addLayout(toolbar_row)
-
-        layout.addWidget(controls)
-
-        progress_card = QtWidgets.QFrame()
-        progress_card.setObjectName("ProgressCard")
-        progress_layout = QtWidgets.QVBoxLayout(progress_card)
-        progress_layout.setContentsMargins(16, 10, 16, 10)
-        progress_layout.setSpacing(8)
+        toolbar_row.addWidget(self.imap_button)
+        toolbar_row.addWidget(self.graph_button)
+        toolbar_row.addSpacing(8)
+        toolbar_row.addWidget(export_csv_button)
+        toolbar_row.addWidget(self.stop_button)
+        toolbar_row.addStretch(1)
+        toolbar_row.addWidget(self.fetch_selected_button)
+        toolbar_row.addWidget(self.fetch_all_button)
+        workspace_layout.addLayout(toolbar_row)
 
         progress_header = QtWidgets.QHBoxLayout()
         progress_header.setSpacing(8)
         progress_title = QtWidgets.QLabel("取件进度")
-        progress_title.setObjectName("ProgressTitle")
+        progress_title.setObjectName("SectionTitle")
         progress_header.addWidget(progress_title)
 
         self.progress_text = QtWidgets.QLabel("等待操作")
@@ -895,15 +955,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.progress_percent.setFixedHeight(24)
         self.progress_percent.setMinimumWidth(54)
         progress_header.addWidget(self.progress_percent)
-        progress_layout.addLayout(progress_header)
+        workspace_layout.addLayout(progress_header)
 
         self.progress_bar = QtWidgets.QProgressBar()
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setFixedHeight(8)
-        progress_layout.addWidget(self.progress_bar)
-        layout.addWidget(progress_card)
+        workspace_layout.addWidget(self.progress_bar)
+        layout.addWidget(workspace)
 
         result_section = QtWidgets.QFrame()
         result_section.setObjectName("ResultSection")
@@ -942,7 +1002,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.result_container = QtWidgets.QWidget()
         self.result_container.setObjectName("ResultContainer")
         self.result_layout = QtWidgets.QVBoxLayout(self.result_container)
-        self.result_layout.setContentsMargins(16, 12, 12, 12)
+        self.result_layout.setContentsMargins(16, 12, 12, 16)
         self.result_layout.setSpacing(8)
         self.result_layout.addStretch(1)
         self.result_scroll.setWidget(self.result_container)
