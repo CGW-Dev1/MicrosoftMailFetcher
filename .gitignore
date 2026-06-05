@@ -2,5 +2,13 @@ __pycache__/
 *.py[cod]
 
 build/
+dist/
 *.spec
 qt_*.png
+android/.gradle/
+android/build/
+android/local.properties
+android/app/build/
+*.aab
+*.jks
+*.keystore
