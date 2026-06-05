@@ -1,15 +1,37 @@
 # 邮件验证码助手
 当前版本：V1.9
 
-本项目是一个本地 Windows 桌面工具，用于批量导入 Outlook/Hotmail 邮箱账号，并通过 Microsoft Graph 或 IMAP OAuth 获取最新邮件、提取验证码。
+本项目包含 Windows 桌面版和 Android App 两个版本，用于批量导入 Outlook/Hotmail 邮箱账号，并通过 Microsoft Graph 或 IMAP OAuth 获取最新邮件、提取验证码。
+
+Android 版定位为“邮箱账号池 + 验证码取件工作台”，适合在手机上完成导入邮箱、选择账号、取验证码、复制验证码、查看结果和导出数据等流程。
 
 ## 下载
 
-最新版 exe：
+Windows 桌面版 exe：
 
 ```text
 https://github.com/CGW-Dev1/MicrosoftMailFetcher/raw/main/dist/邮件验证码助手.exe
 ```
+
+Android App APK：
+
+```text
+https://github.com/CGW-Dev1/MicrosoftMailFetcher/raw/main/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+手机安装 APK 时，如系统提示“未知来源应用”，需要允许当前浏览器或文件管理器安装应用。
+
+## Android App 介绍
+
+Android 版已经按手机竖屏工作流重构，不是简单照搬桌面布局。
+
+- 底部导航：取件 / 邮箱 / 结果 / 设置。
+- 取件页：搜索邮箱、选择邮箱、全部取件、选中取件、停止任务、查看最近结果。
+- 邮箱页：按未使用 / Plus / Free / 已封禁分类管理邮箱，支持搜索、复制、改标签、移动分类、删除和导出。
+- 结果页：按全部 / Graph / IMAP / SMS 筛选结果，支持搜索邮件内容、搜索发件人、复制验证码、查看邮件详情和打开网页。
+- 设置页：管理协议、每账号读取封数、简洁模式、深色模式、手机号取码和数据导入导出。
+- 本地安全：Android 版使用 Android Keystore 加密保存账号、refresh_token 和手机号 API。
+- 系统适配：支持 Android 15，界面会避开状态栏和底部导航区域，并按不同安卓手机宽度自适应。
 
 ## 版本规则
 
@@ -43,6 +65,21 @@ python app.py
 dist\邮件验证码助手.exe
 ```
 
+## 构建 Android APK
+
+Android 工程位于 `android/` 目录。
+
+```powershell
+cd android
+& 'C:\Users\cuigw\.gradle\wrapper\dists\gradle-8.14.3-all\10utluxaxniiv4wxiphsi49nj\gradle-8.14.3\bin\gradle.bat' assembleDebug
+```
+
+构建完成后 APK 位于：
+
+```text
+android\app\build\outputs\apk\debug\app-debug.apk
+```
+
 ## 导入格式
 
 每行一个账号，格式如下：
@@ -72,9 +109,11 @@ email@outlook.com----password----client_id----refresh_token----已封禁
 - 支持导出账号和导出取件结果 CSV。
 - 支持复制邮箱。
 - 支持本地单文件 exe 打包。
+- 支持 Android APK 直接安装使用。
 
 ## 安全说明
 
 - 导入的邮箱、密码、client_id、refresh_token 会保存在本机。
 - 保存文件使用当前 Windows 用户的 DPAPI 加密。
+- Android 版使用 Android Keystore 加密保存。
 - 导出账号时会导出明文内容，并在末尾带分类，方便备份和迁移。
