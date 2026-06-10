@@ -1,6 +1,7 @@
 package com.cgwdev.wremail;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
@@ -232,11 +233,13 @@ final class Parsing {
         }
         try {
             String normalized = value.endsWith("Z") ? value.substring(0, value.length() - 1) + "+00:00" : value;
-            return OffsetDateTime.parse(normalized).toLocalDateTime().format(DateTimeFormatter.ofPattern("MM/dd HH:mm"));
+            return OffsetDateTime.parse(normalized)
+                    .atZoneSameInstant(ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("MM/dd HH:mm"));
         } catch (Exception ignored) {
             try {
                 return ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME)
-                        .toLocalDateTime()
+                        .withZoneSameInstant(ZoneId.systemDefault())
                         .format(DateTimeFormatter.ofPattern("MM/dd HH:mm"));
             } catch (Exception ignoredAgain) {
                 return value;

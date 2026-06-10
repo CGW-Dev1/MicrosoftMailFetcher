@@ -71,6 +71,7 @@ public class MainActivity extends Activity {
     private ViewGroup tabBar;
     private FrameLayout content;
     private TextView statusView;
+    private LinearLayout progressBox;
     private TextView progressText;
     private ProgressBar progressBar;
 
@@ -234,7 +235,9 @@ public class MainActivity extends Activity {
 
     private View buildProgress() {
         LinearLayout box = vertical();
+        progressBox = box;
         box.setPadding(dp(10), dp(6), dp(10), dp(8));
+        box.setVisibility(View.GONE);
         progressText = label("等待任务", 12, Typeface.NORMAL);
         progressText.setTextColor(colorMuted());
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
@@ -294,11 +297,13 @@ public class MainActivity extends Activity {
 
         pageBox.addView(statsCard(), matchWrap());
 
-        pageBox.addView(fetchSearchCard(), spaced());
-
-        pageBox.addView(fetchConfigCard(), spaced());
+        latestCodeBox = vertical();
+        latestCodeBox.addView(latestCodeCard(), matchWrap());
+        pageBox.addView(latestCodeBox, spaced());
 
         pageBox.addView(fetchDeskCard(), spaced());
+
+        pageBox.addView(fetchSearchCard(), spaced());
 
         pageBox.addView(recentResultsCard(), spaced());
     }
@@ -559,10 +564,10 @@ public class MainActivity extends Activity {
 
     private View fetchDeskCard() {
         LinearLayout card = vertical();
-        card.setPadding(dp(12), dp(12), dp(12), dp(8));
+        card.setPadding(dp(12), dp(12), dp(12), dp(10));
         card.setBackground(cardBg());
 
-        TextView title = label("主操作", 16, Typeface.BOLD);
+        TextView title = label("取件工作台", 16, Typeface.BOLD);
         card.addView(title, matchWrap());
 
         int selected = 0;
@@ -574,6 +579,11 @@ public class MainActivity extends Activity {
         TextView meta = label("已选 " + selected + " 个 · 匹配 " + fetchCandidateAccounts().size() + " 个 · 全部 " + store.accounts.size() + " 个", 12, Typeface.NORMAL);
         meta.setTextColor(colorMuted());
         card.addView(meta, matchWrap());
+
+        LinearLayout.LayoutParams topSettingParams = matchWrap();
+        topSettingParams.topMargin = dp(8);
+        card.addView(settingRow("每次取件", store.config.top + " 封", v -> chooseTopCount()), topSettingParams);
+        card.addView(settingRow("协议", store.config.protocol.equalsIgnoreCase("IMAP") ? "IMAP 优先" : "Graph 优先", v -> chooseProtocol()), matchWrap());
 
         LinearLayout primaryActions = horizontal();
         primaryActions.addView(button("全部取件", "primary", v -> fetchAccounts(emailsOf(store.accounts))), equalButtonParams(4, 0));
@@ -1198,6 +1208,7 @@ public class MainActivity extends Activity {
         mailRows.clear();
         renderLatestCodeBox();
         renderResultsList();
+        showProgressPanel();
         progressBar.setMax(accounts.size());
         progressBar.setProgress(0);
         progressBar.setVisibility(View.VISIBLE);
@@ -1247,6 +1258,7 @@ public class MainActivity extends Activity {
                 fetchRunning = false;
                 progressBar.setProgress(accounts.size());
                 progressBar.setVisibility(View.GONE);
+                hideProgressPanel();
                 progressText.setText(stopped ? "已停止" : "完成");
                 showStatus((stopped ? "已停止" : "完成") + " " + finalSuccess + "/" + accounts.size() + " | " + finalTotalMessages + " 条");
                 renderLatestCodeBox();
@@ -1276,6 +1288,7 @@ public class MainActivity extends Activity {
             return;
         }
         fetchRunning = true;
+        showProgressPanel();
         progressBar.setMax(1);
         progressBar.setProgress(0);
         progressBar.setVisibility(View.VISIBLE);
@@ -1296,6 +1309,7 @@ public class MainActivity extends Activity {
                     fetchRunning = false;
                     progressBar.setProgress(1);
                     progressBar.setVisibility(View.GONE);
+                    hideProgressPanel();
                     progressText.setText("取码完成");
                     showStatus("手机号验证码：" + firstNonEmpty(code, "未识别"));
                     renderLatestCodeBox();
@@ -1314,6 +1328,7 @@ public class MainActivity extends Activity {
                 mainHandler.post(() -> {
                     fetchRunning = false;
                     progressBar.setVisibility(View.GONE);
+                    hideProgressPanel();
                     progressText.setText("取码失败");
                     showStatus("手机号取码失败：" + Parsing.compact(exc.getMessage(), 120));
                     if (standalone) {
@@ -1348,6 +1363,7 @@ public class MainActivity extends Activity {
         }
         fetchRunning = true;
         stopRequested = false;
+        showProgressPanel();
         progressBar.setMax(targets.size());
         progressBar.setProgress(0);
         progressBar.setVisibility(View.VISIBLE);
@@ -1383,6 +1399,7 @@ public class MainActivity extends Activity {
             mainHandler.post(() -> {
                 fetchRunning = false;
                 progressBar.setVisibility(View.GONE);
+                hideProgressPanel();
                 progressText.setText(stopped ? "已停止" : "取码完成");
                 showStatus((stopped ? "已停止" : "取码完成") + "：" + finalSuccess + "/" + targets.size());
                 renderStandaloneList();
@@ -1392,8 +1409,21 @@ public class MainActivity extends Activity {
 
     private void requestStop() {
         stopRequested = true;
+        showProgressPanel();
         progressText.setText("正在停止…");
         showStatus("正在停止任务");
+    }
+
+    private void showProgressPanel() {
+        if (progressBox != null) {
+            progressBox.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void hideProgressPanel() {
+        if (progressBox != null) {
+            progressBox.setVisibility(View.GONE);
+        }
     }
 
     private void showPasteDialog(String title, boolean accounts, boolean standalonePhones) {

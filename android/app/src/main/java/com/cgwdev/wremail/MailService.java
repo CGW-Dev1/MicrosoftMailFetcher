@@ -72,7 +72,7 @@ final class MailService {
         row.account = phone.emails.isEmpty() ? phone.phone : String.join(", ", phone.emails);
         row.phone = phone.phone;
         row.protocol = "SMS";
-        row.time = apiDataField(payload, "code_time");
+        row.time = Parsing.fmtDate(apiDataField(payload, "code_time"));
         row.sender = phone.phone;
         row.subject = code.isEmpty() ? "未识别" : code;
         row.code = code;
