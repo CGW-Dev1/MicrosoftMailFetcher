@@ -711,7 +711,17 @@ class PhoneDialog(QtWidgets.QDialog):
 
         action_payloads: dict[QtGui.QAction, tuple[str, str]] = {}
         phone_email_keys = {email.lower() for email in phone.emails}
-        bindable_emails = [email for email in self.available_emails if email.lower() not in phone_email_keys]
+        other_bound_email_keys = {
+            email.lower()
+            for item in self.phone_store.phones
+            if item.phone != phone.phone
+            for email in item.emails
+        }
+        bindable_emails = [
+            email
+            for email in self.available_emails
+            if email.lower() not in phone_email_keys and email.lower() not in other_bound_email_keys
+        ]
         if len(phone.emails) < self.phone_store.max_emails_per_phone and bindable_emails:
             bind_title = menu.addAction("绑定邮箱")
             bind_title.setEnabled(False)
