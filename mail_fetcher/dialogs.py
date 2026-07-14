@@ -30,7 +30,7 @@ class ImportDialog(QtWidgets.QDialog):
         title.setObjectName("DialogTitle")
         layout.addWidget(title)
 
-        desc = QtWidgets.QLabel("每行格式：email----password----client_id----graph_refresh_token。导出文件会多一段分类，也会保留绑定手机号和短信API。")
+        desc = QtWidgets.QLabel("每行格式：email----password----client_id----refresh_token。导出文件会保留自定义分类、绑定手机号和短信 API。")
         desc.setObjectName("DialogText")
         desc.setWordWrap(True)
         layout.addWidget(desc)

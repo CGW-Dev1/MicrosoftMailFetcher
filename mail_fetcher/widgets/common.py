@@ -58,7 +58,7 @@ class CheckBox(QtWidgets.QCheckBox):
     def sizeHint(self) -> QtCore.QSize:
         metrics = self.fontMetrics()
         text_width = metrics.horizontalAdvance(self.text()) if self.text() else 0
-        width = 34 + (text_width + 12 if self.text() else 0)
+        width = 28 + (text_width + 10 if self.text() else 0)
         height = max(32, metrics.height() + 10)
         return QtCore.QSize(width, height)
 
@@ -71,17 +71,17 @@ class CheckBox(QtWidgets.QCheckBox):
         painter.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing, True)
 
         rect = self.rect()
-        box = QtCore.QRectF(3, (rect.height() - 24) / 2, 24, 24)
+        box = QtCore.QRectF(3, (rect.height() - 20) / 2, 20, 20)
         window_color = self.palette().color(QtGui.QPalette.ColorRole.Window)
         is_dark = window_color.lightness() < 110
         if is_dark:
-            fill = QtGui.QColor("#274267" if self.isChecked() else "#182842")
-            border = QtGui.QColor("#6f8fb5" if self.underMouse() else ("#5f7fa8" if self.isChecked() else "#49698f"))
-            check = QtGui.QColor("#ff8a8a")
+            fill = QtGui.QColor("#2563eb" if self.isChecked() else "#171a21")
+            border = QtGui.QColor("#7aa2f7" if self.underMouse() else ("#4f82ed" if self.isChecked() else "#4b5260"))
+            check = QtGui.QColor("#ffffff")
         else:
-            fill = QtGui.QColor("#dbe8ff" if self.isChecked() else "#e7f0ff")
-            border = QtGui.QColor("#2f6fed" if self.underMouse() else ("#7fa2f8" if self.isChecked() else "#9bbcff"))
-            check = QtGui.QColor("#e25353")
+            fill = QtGui.QColor("#2563eb" if self.isChecked() else "#ffffff")
+            border = QtGui.QColor("#1d4ed8" if self.underMouse() else ("#2563eb" if self.isChecked() else "#b7c0ce"))
+            check = QtGui.QColor("#ffffff")
 
         painter.setPen(QtGui.QPen(border, 2))
         painter.setBrush(fill)
@@ -90,12 +90,12 @@ class CheckBox(QtWidgets.QCheckBox):
         if self.isChecked():
             pen = QtGui.QPen(check, 2.6, QtCore.Qt.PenStyle.SolidLine, QtCore.Qt.PenCapStyle.RoundCap, QtCore.Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)
-            painter.drawLine(QtCore.QPointF(box.left() + 5.8, box.top() + 12.6), QtCore.QPointF(box.left() + 10.0, box.top() + 16.8))
-            painter.drawLine(QtCore.QPointF(box.left() + 9.8, box.top() + 16.4), QtCore.QPointF(box.left() + 18.0, box.top() + 6.8))
+            painter.drawLine(QtCore.QPointF(box.left() + 4.8, box.top() + 10.6), QtCore.QPointF(box.left() + 8.4, box.top() + 14.2))
+            painter.drawLine(QtCore.QPointF(box.left() + 8.2, box.top() + 13.9), QtCore.QPointF(box.left() + 15.6, box.top() + 6.0))
 
         if self.text():
             painter.setPen(self.palette().color(QtGui.QPalette.ColorRole.WindowText))
-            text_rect = QtCore.QRectF(box.right() + 10, 0, rect.width() - box.right() - 10, rect.height())
+            text_rect = QtCore.QRectF(box.right() + 8, 0, rect.width() - box.right() - 8, rect.height())
             painter.drawText(text_rect, QtCore.Qt.AlignmentFlag.AlignVCenter | QtCore.Qt.AlignmentFlag.AlignLeft, self.text())
 
 

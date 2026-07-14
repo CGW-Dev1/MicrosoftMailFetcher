@@ -6,8 +6,6 @@ from datetime import datetime
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
 
-import phonenumbers
-
 from .constants import (
     ACCOUNT_CATEGORY_BANNED,
     ACCOUNT_CATEGORY_FREE,
@@ -22,7 +20,8 @@ PHONE_RE = re.compile(r"^\+\d{6,18}$")
 
 
 def normalize_account_category(value: str | None) -> str:
-    text = (value or "").strip().lower()
+    raw = (value or "").strip()
+    text = raw.lower()
     if text in {"plus", "p", "已plus", "标记plus"}:
         return ACCOUNT_CATEGORY_PLUS
     if text in {"free", "f", "已free", "标记free"}:
@@ -31,7 +30,9 @@ def normalize_account_category(value: str | None) -> str:
         return ACCOUNT_CATEGORY_BANNED
     if text in {"unused", "未使用", "未标记", "none", ""}:
         return ACCOUNT_CATEGORY_UNUSED
-    return ACCOUNT_CATEGORY_UNUSED
+    # Preserve unknown labels so AccountStore can resolve them against (or add
+    # them to) the user's custom category menu during import.
+    return raw[:24] or ACCOUNT_CATEGORY_UNUSED
 
 
 def is_ignored_import_line(line: str) -> bool:
@@ -225,6 +226,10 @@ def short_sender(sender: str) -> str:
 
 
 def phone_without_country_code(phone_number: str) -> str:
+    # phonenumbers ships a sizeable metadata table.  Phone normalization is a
+    # secondary workflow, so defer that import until the feature is used.
+    import phonenumbers
+
     text = (phone_number or "").strip()
     if not text:
         return ""

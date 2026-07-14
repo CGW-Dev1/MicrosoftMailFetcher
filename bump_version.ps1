@@ -3,12 +3,15 @@ $ErrorActionPreference = "Stop"
 $versionPath = Join-Path $PSScriptRoot "VERSION"
 $constantsPath = Join-Path $PSScriptRoot "mail_fetcher\constants.py"
 $readmePath = Join-Path $PSScriptRoot "README.md"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$versionLabel = -join ([char[]](0x5F53, 0x524D, 0x7248, 0x672C))
+$versionLinePrefix = $versionLabel + [char]0xFF1A
 
 if (-not (Test-Path $versionPath)) {
-    "V1.0" | Set-Content -LiteralPath $versionPath -Encoding UTF8
+    [IO.File]::WriteAllText($versionPath, "V1.0" + [Environment]::NewLine, $utf8NoBom)
 }
 
-$current = (Get-Content -LiteralPath $versionPath -Raw).Trim()
+$current = [IO.File]::ReadAllText($versionPath, $utf8NoBom).Trim()
 if ($current -notmatch '^V(\d+)\.(\d+)$') {
     throw "Invalid VERSION value: $current"
 }
@@ -23,30 +26,31 @@ if ($minor -ge 9) {
 }
 
 $next = "V$major.$minor"
-$next | Set-Content -LiteralPath $versionPath -Encoding UTF8
+[IO.File]::WriteAllText($versionPath, $next + [Environment]::NewLine, $utf8NoBom)
 
-$constantsText = Get-Content -LiteralPath $constantsPath -Raw -Encoding UTF8
+$constantsText = [IO.File]::ReadAllText($constantsPath, $utf8NoBom)
 $constantsText = [regex]::Replace($constantsText, 'APP_VERSION = "V\d+\.\d+"', "APP_VERSION = `"$next`"")
-Set-Content -LiteralPath $constantsPath -Value $constantsText -Encoding UTF8
+[IO.File]::WriteAllText($constantsPath, $constantsText, $utf8NoBom)
 
 if (Test-Path $readmePath) {
-    $readme = Get-Content -LiteralPath $readmePath -Raw -Encoding UTF8
-    if ($readme -match '(?m)^当前版本：V\d+\.\d+\s*$') {
-        $readme = [regex]::Replace($readme, '(?m)^当前版本：V\d+\.\d+\s*$', "当前版本：$next")
+    $readme = [IO.File]::ReadAllText($readmePath, $utf8NoBom)
+    $versionPattern = '(?m)^' + [regex]::Escape($versionLinePrefix) + 'V\d+\.\d+\s*$'
+    if ($readme -match $versionPattern) {
+        $readme = [regex]::Replace($readme, $versionPattern, "$versionLinePrefix$next")
     } else {
         $lines = $readme -split "`r?`n"
         if ($lines.Count -gt 0) {
             if ($lines.Count -gt 1) {
-                $lines = @($lines[0], "当前版本：$next") + $lines[1..($lines.Count - 1)]
+                $lines = @($lines[0], "$versionLinePrefix$next") + $lines[1..($lines.Count - 1)]
             } else {
-                $lines = @($lines[0], "当前版本：$next")
+                $lines = @($lines[0], "$versionLinePrefix$next")
             }
             $readme = $lines -join "`r`n"
         } else {
-            $readme = "当前版本：$next"
+            $readme = "$versionLinePrefix$next"
         }
     }
-    Set-Content -LiteralPath $readmePath -Value $readme -Encoding UTF8
+    [IO.File]::WriteAllText($readmePath, $readme, $utf8NoBom)
 }
 
 Write-Host "Version bumped: $current -> $next"

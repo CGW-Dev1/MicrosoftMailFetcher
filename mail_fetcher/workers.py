@@ -56,7 +56,11 @@ class FetchWorker(QtCore.QThread):
                 self.service.ensure_graph()
 
             self.status_changed.emit(f"取件中 0/{total_jobs}")
-            with ThreadPoolExecutor(max_workers=min(12, max(1, total_jobs))) as executor:
+            # Outlook IMAP is more sensitive to bursts of concurrent logins
+            # than Graph.  A smaller pool avoids intermittent AUTH/rate-limit
+            # failures when fetching many accounts at once.
+            worker_limit = 5 if self.protocol == "IMAP" else 12
+            with ThreadPoolExecutor(max_workers=min(worker_limit, max(1, total_jobs))) as executor:
                 futures: dict[object, AccountRecord] = {}
                 for account in self.accounts:
                     future = executor.submit(
@@ -85,7 +89,8 @@ class FetchWorker(QtCore.QThread):
                         status_changed = True
                         self.results_ready.emit(rows)
                     except Exception as exc:
-                        self.account_store.mark(account.email, "获取失败", save=False)
+                        detail = " ".join(str(exc).split())[:96]
+                        self.account_store.mark(account.email, f"失败 · {detail}", save=False)
                         status_changed = True
                         self.log_message.emit(f"{account.email} 获取失败：{exc}")
                     self.progress_changed.emit(completed, total_jobs, account.email, total)

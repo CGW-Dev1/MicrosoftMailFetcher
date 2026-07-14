@@ -23,19 +23,20 @@ class AccountCard(ClickableFrame):
     phone_code_requested = QtCore.pyqtSignal(str)
     tag_requested = QtCore.pyqtSignal(str)
 
-    def __init__(self, account: AccountRecord, checked: bool) -> None:
+    def __init__(self, account: AccountRecord, checked: bool, category_label: str | None = None) -> None:
         super().__init__()
         self.account = account
         self.setObjectName("AccountCard")
         self.setProperty("selected", "true" if checked else "false")
+        self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(78)
-        self.setMaximumHeight(78)
+        self.setMinimumHeight(70)
+        self.setMaximumHeight(70)
         self.clicked.connect(self.toggle_selection)
 
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(10)
+        layout.setContentsMargins(12, 8, 10, 8)
+        layout.setSpacing(9)
 
         self.checkbox = CheckBox()
         self.checkbox.setChecked(checked)
@@ -55,55 +56,35 @@ class AccountCard(ClickableFrame):
 
         phone_text = f" · {account.phone}" if account.phone else ""
         tag_text = f" · 标签:{compact_text(account.tag, 18)}" if account.tag else ""
-        self.meta_label = ElidedLabel(f"{account.category_label} · {account.source}{phone_text}{tag_text} · {account.last_status}")
+        shown_category = category_label or account.category_label
+        self.meta_label = ElidedLabel(f"{shown_category} · {account.source}{phone_text}{tag_text} · {account.last_status}")
         self.meta_label.setObjectName("AccountMeta")
         self.meta_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         text_box.addWidget(self.meta_label)
 
         layout.addWidget(text_host, 1)
 
-        actions_host = QtWidgets.QWidget()
-        actions_host.setFixedWidth(116)
-        actions_host.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
-        actions = QtWidgets.QGridLayout(actions_host)
-        actions.setContentsMargins(0, 0, 0, 0)
-        actions.setHorizontalSpacing(8)
-        actions.setVerticalSpacing(6)
+        self.action_button = QtWidgets.QToolButton()
+        self.action_button.setText("⋯")
+        self.action_button.setProperty("role", "account-menu")
+        self.action_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.action_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.action_button.setFixedSize(34, 34)
+        self.action_button.setToolTip("账号操作")
 
-        self.mail_button = pill_button("邮箱", role="mini-action")
-        self.mail_button.setFixedSize(54, 28)
-        self.mail_button.setProperty("compact", "true")
-        self.mail_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.mail_button.setToolTip(f"获取邮箱验证码：{account.email}")
-        self.mail_button.clicked.connect(lambda: self.mail_code_requested.emit(self.account.email))
-        actions.addWidget(self.mail_button, 0, 1)
-
-        self.phone_button = pill_button("手机", role="mini-action")
-        self.phone_button.setFixedSize(54, 28)
-        self.phone_button.setProperty("compact", "true")
-        self.phone_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.phone_button.setEnabled(bool(account.phone))
-        self.phone_button.setToolTip(f"获取手机号验证码：{account.phone}" if account.phone else "未绑定手机号")
-        self.phone_button.clicked.connect(lambda: self.phone_code_requested.emit(self.account.email))
-        actions.addWidget(self.phone_button, 0, 0)
-
-        tag_button_text = compact_text(account.tag, 6) if account.tag else "标签"
-        tag_button_role = "tagged" if account.tag else "mini-action"
-        self.tag_button = pill_button(tag_button_text, role=tag_button_role)
-        self.tag_button.setFixedSize(54, 28)
-        self.tag_button.setProperty("compact", "true")
-        self.tag_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.tag_button.setToolTip(f"编辑标签：{account.tag}" if account.tag else "添加自定义标签")
-        self.tag_button.clicked.connect(lambda: self.tag_requested.emit(self.account.email))
-        actions.addWidget(self.tag_button, 1, 0)
-
-        self.copy_button = pill_button("复制", role="mini-action")
-        self.copy_button.setFixedSize(54, 28)
-        self.copy_button.setProperty("compact", "true")
-        self.copy_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.copy_button.clicked.connect(lambda: self.copy_requested.emit(self.account.email))
-        actions.addWidget(self.copy_button, 1, 1)
-        layout.addWidget(actions_host, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        menu = QtWidgets.QMenu(self.action_button)
+        fetch_mail_action = menu.addAction("邮箱取码")
+        fetch_mail_action.triggered.connect(lambda: self.mail_code_requested.emit(self.account.email))
+        fetch_phone_action = menu.addAction("手机取码")
+        fetch_phone_action.setEnabled(bool(account.phone))
+        fetch_phone_action.triggered.connect(lambda: self.phone_code_requested.emit(self.account.email))
+        menu.addSeparator()
+        copy_action = menu.addAction("复制邮箱")
+        copy_action.triggered.connect(lambda: self.copy_requested.emit(self.account.email))
+        tag_action = menu.addAction("编辑标签")
+        tag_action.triggered.connect(lambda: self.tag_requested.emit(self.account.email))
+        self.action_button.setMenu(menu)
+        layout.addWidget(self.action_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
 
     def toggle_selection(self) -> None:
         self.checkbox.setChecked(not self.checkbox.isChecked())

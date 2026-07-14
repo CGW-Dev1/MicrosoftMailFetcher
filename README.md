@@ -1,5 +1,5 @@
 # 邮件验证码助手
-当前版本：V1.9
+当前版本：V2.0
 
 本项目包含 Windows 桌面版和 Android App 两个版本，用于批量导入 Outlook/Hotmail 邮箱账号，并通过 Microsoft Graph 或 IMAP OAuth 获取最新邮件、提取验证码。
 
@@ -36,8 +36,7 @@ Android 版已经按手机竖屏工作流重构，不是简单照搬桌面布局
 ## 版本规则
 
 - 当前版本从 `V1.0` 开始。
-- 小版本依次递增：`V1.0 -> V1.1 -> ... -> V1.9`。
-- 到 `V1.9` 后下一版自动变为 `V2.0`。
+- 小版本依次递增：`V1.0 -> V1.1 -> ... -> V1.9 -> V2.0`。
 - 版本号保存在 `VERSION` 文件中，同时显示在软件标题和主界面标题里。
 
 升级版本号：
@@ -55,15 +54,27 @@ python app.py
 
 ## 打包 exe
 
+默认生成快速启动目录版：
+
 ```powershell
 .\build.ps1
 ```
 
-打包完成后 exe 位于：
+exe 位于：
 
 ```text
-dist\邮件验证码助手.exe
+dist\邮件验证码助手\邮件验证码助手.exe
 ```
+
+目录中的 `runtime` 必须和 exe 一起分发。目录版无需在每次启动时解压 Qt，启动速度明显快于单文件版。
+
+生成用于 GitHub 直接下载的单文件 exe：
+
+```powershell
+.\build.ps1 -OneFile
+```
+
+单文件 exe 位于 `dist\邮件验证码助手.exe`。依赖已经安装时可添加 `-SkipInstall`，跳过重复的 pip 检查。
 
 ## 构建 Android APK
 
@@ -88,7 +99,7 @@ android\app\build\outputs\apk\debug\app-debug.apk
 email@outlook.com----password----client_id----refresh_token
 ```
 
-普通四段格式导入后会进入“未使用”菜单。软件导出的账号会在末尾增加分类，重新导入时会自动回到对应菜单：
+普通四段格式导入后会进入“未使用”菜单。软件导出的账号会在末尾增加分类，重新导入时会自动回到对应菜单；Windows 版导入不存在的分类名称时会自动创建该分类：
 
 ```text
 email@outlook.com----password----client_id----refresh_token----已封禁
@@ -101,14 +112,14 @@ email@outlook.com----password----client_id----refresh_token----已封禁
 ## 主要功能
 
 - 批量导入账号，重复邮箱自动过滤。
-- 导入普通账号默认进入“未使用”菜单，导入带分类的导出文件会自动进入“未使用 / Plus / Free / 已封禁”对应菜单。
-- 支持批量标记到 Plus / Free / 已封禁，也可以移回未使用。
-- Graph 令牌 / IMAP 令牌切换，默认使用 Graph。
+- Windows 版支持新增、重命名和删除账号分类；删除分类后，其中的账号会移回“未使用”。
+- 批量移动目标会自动读取当前已有分类，新增和删除后立即同步。
+- Graph 令牌 / IMAP 令牌切换，并记住上次选择的协议。
 - 支持简洁模式，只提取最新验证码。
 - 支持按邮箱、邮件内容、发件人搜索。
 - 支持导出账号和导出取件结果 CSV。
 - 支持复制邮箱。
-- 支持本地单文件 exe 打包。
+- 支持快速启动目录版和可选单文件版 exe 打包。
 - 支持 Android APK 直接安装使用。
 
 ## 安全说明

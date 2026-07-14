@@ -1,10 +1,10 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
 
 APP_NAME = "OutlookHotmailMailFetcher"
 DISPLAY_NAME = "邮件验证码助手"
-APP_VERSION = "V1.9"
+APP_VERSION = "V2.0"  # Keep synchronized with VERSION.
 
 AUTHORITY_BASE = "https://login.microsoftonline.com"
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
@@ -17,7 +17,7 @@ GRAPH_REFRESH_SCOPE_OPTIONS: list[str | None] = [
 ]
 IMAP_REFRESH_SCOPE_OPTIONS: list[str | None] = [
     "https://outlook.office.com/IMAP.AccessAsUser.All offline_access",
-    "IMAP.AccessAsUser.All offline_access",
+    "https://outlook.office.com/IMAP.AccessAsUser.All",
 ]
 IMAP_HOST = "outlook.office365.com"
 
@@ -46,3 +46,9 @@ ACCOUNT_CATEGORY_LABELS = {
     ACCOUNT_CATEGORY_FREE: "Free",
     ACCOUNT_CATEGORY_BANNED: "已封禁",
 }
+DEFAULT_ACCOUNT_CATEGORIES = [
+    (ACCOUNT_CATEGORY_UNUSED, ACCOUNT_CATEGORY_LABELS[ACCOUNT_CATEGORY_UNUSED]),
+    (ACCOUNT_CATEGORY_PLUS, ACCOUNT_CATEGORY_LABELS[ACCOUNT_CATEGORY_PLUS]),
+    (ACCOUNT_CATEGORY_FREE, ACCOUNT_CATEGORY_LABELS[ACCOUNT_CATEGORY_FREE]),
+    (ACCOUNT_CATEGORY_BANNED, ACCOUNT_CATEGORY_LABELS[ACCOUNT_CATEGORY_BANNED]),
+]

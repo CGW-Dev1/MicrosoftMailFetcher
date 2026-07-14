@@ -4,19 +4,17 @@ import json
 import threading
 from dataclasses import asdict
 from datetime import datetime, timezone
+from pathlib import Path
 
-from .constants import (
-    ACCOUNT_CATEGORY_LABELS,
-    ACCOUNT_CATEGORY_PLUS,
-    ACCOUNT_CATEGORY_UNUSED,
-)
+from .categories import CategoryStore
+from .constants import ACCOUNT_CATEGORY_PLUS, ACCOUNT_CATEGORY_UNUSED
 from .models import AccountRecord, ImportRecord, PhoneImportRecord, PhoneRecord
-from .parsing import normalize_account_category
 from .security import EncryptedTextFile, app_data_dir
 
 
 class AccountStore:
-    def __init__(self) -> None:
+    def __init__(self, category_store: CategoryStore | None = None) -> None:
+        self.category_store = category_store or CategoryStore()
         self.legacy_path = app_data_dir() / "accounts.json"
         self.path = app_data_dir() / "accounts.sec"
         self.secure_file = EncryptedTextFile(self.path)
@@ -45,9 +43,9 @@ class AccountStore:
             pass
 
     def _normalize(self, item: dict) -> dict:
-        category = normalize_account_category(item.get("category", ""))
+        category = self.category_store.resolve_or_add(item.get("category", ""))
         if category == ACCOUNT_CATEGORY_UNUSED and bool(item.get("used", False)):
-            category = ACCOUNT_CATEGORY_PLUS
+            category = self.category_store.resolve(ACCOUNT_CATEGORY_PLUS) or ACCOUNT_CATEGORY_UNUSED
         return {
             "email": item.get("email", ""),
             "password": item.get("password", ""),
@@ -76,7 +74,7 @@ class AccountStore:
                 current = existing.get(record.email.lower())
                 if current:
                     changed = False
-                    category = normalize_account_category(record.category)
+                    category = self.category_store.resolve_or_add(record.category)
                     updates = {
                         "password": record.password,
                         "client_id": record.client_id,
@@ -96,7 +94,7 @@ class AccountStore:
                     else:
                         skipped += 1
                     continue
-                category = normalize_account_category(record.category)
+                category = self.category_store.resolve_or_add(record.category)
                 account = AccountRecord(
                     email=record.email,
                     password=record.password,
@@ -156,7 +154,7 @@ class AccountStore:
         return self.set_category(emails, ACCOUNT_CATEGORY_PLUS if used else ACCOUNT_CATEGORY_UNUSED)
 
     def set_category(self, emails: set[str], category: str) -> int:
-        normalized = normalize_account_category(category)
+        normalized = self.category_store.resolve(category) or ACCOUNT_CATEGORY_UNUSED
         with self.lock:
             changed = 0
             for account in self.accounts:
@@ -168,10 +166,22 @@ class AccountStore:
                 self.save()
             return changed
 
-    @staticmethod
-    def category_label(category: str) -> str:
-        normalized = normalize_account_category(category)
-        return ACCOUNT_CATEGORY_LABELS.get(normalized, ACCOUNT_CATEGORY_LABELS[ACCOUNT_CATEGORY_UNUSED])
+    def category_label(self, category: str) -> str:
+        return self.category_store.label(category)
+
+    def reassign_category(self, source: str, target: str = ACCOUNT_CATEGORY_UNUSED) -> int:
+        normalized_target = self.category_store.resolve(target) or ACCOUNT_CATEGORY_UNUSED
+        with self.lock:
+            changed = 0
+            for account in self.accounts:
+                if account.category != source:
+                    continue
+                account.category = normalized_target
+                account.used = normalized_target != ACCOUNT_CATEGORY_UNUSED
+                changed += 1
+            if changed:
+                self.save()
+            return changed
 
     def remove(self, emails: set[str]) -> int:
         with self.lock:
@@ -491,8 +501,8 @@ class StandalonePhoneCodeStore:
 
 
 class ConfigStore:
-    def __init__(self) -> None:
-        self.path = app_data_dir() / "config.json"
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = path or (app_data_dir() / "config.json")
         self.client_id = ""
         self.tenant = "consumers"
         self.top = 10
@@ -510,7 +520,7 @@ class ConfigStore:
             self.client_id = data.get("client_id", "")
             self.tenant = data.get("tenant", "consumers")
             self.top = max(1, min(int(data.get("top", 10)), 50))
-            self.protocol = "Graph"
+            self.protocol = "IMAP" if data.get("protocol") == "IMAP" else "Graph"
             self.auto_fetch_after_import = bool(data.get("auto_fetch_after_import", True))
             self.concise_mode = bool(data.get("concise_mode", False))
             self.theme = "dark" if data.get("theme") == "dark" else "light"

@@ -25,7 +25,7 @@ class AccountRecord:
 
     @property
     def category_label(self) -> str:
-        return ACCOUNT_CATEGORY_LABELS.get(self.category, ACCOUNT_CATEGORY_LABELS[ACCOUNT_CATEGORY_UNUSED])
+        return ACCOUNT_CATEGORY_LABELS.get(self.category, self.category or ACCOUNT_CATEGORY_LABELS[ACCOUNT_CATEGORY_UNUSED])
 
 
 @dataclass

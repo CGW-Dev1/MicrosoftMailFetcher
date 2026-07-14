@@ -5,9 +5,6 @@ import re
 import threading
 from urllib.parse import urlencode
 
-import msal
-import requests
-
 from .constants import (
     AUTHORITY_BASE,
     GRAPH_BASE,
@@ -25,7 +22,11 @@ from .storage import AccountStore, ConfigStore
 _http_local = threading.local()
 
 
-def http_session() -> requests.Session:
+def http_session() -> "requests.Session":
+    # requests pulls in urllib3, charset-normalizer and certificate data.  Keep
+    # it out of the startup path and load it only when the first fetch begins.
+    import requests
+
     session = getattr(_http_local, "session", None)
     if session is None:
         session = requests.Session()
@@ -46,7 +47,13 @@ class DirectOAuthClient:
         tenant = self.config.tenant or "consumers"
         return f"{AUTHORITY_BASE}/{tenant}/oauth2/v2.0/token"
 
-    def refresh_access_token(self, account: AccountRecord, scope_options: list[str | None]) -> str:
+    def refresh_access_token(
+        self,
+        account: AccountRecord,
+        scope_options: list[str | None],
+        service_name: str = "Microsoft",
+        required_scope: str = "",
+    ) -> str:
         if not account.client_id or not account.refresh_token:
             raise RuntimeError("缺少 client_id 或 refresh_token")
         errors: list[str] = []
@@ -65,11 +72,16 @@ class DirectOAuthClient:
                 errors.append(str(exc))
                 continue
             if response.status_code < 400 and payload.get("access_token"):
+                granted_scope = str(payload.get("scope") or "")
+                if required_scope and granted_scope and required_scope.lower() not in granted_scope.lower():
+                    errors.append(f"令牌未包含 {required_scope} 权限")
+                    continue
                 if payload.get("refresh_token"):
                     self.account_store.update_refresh_token(account.email, payload["refresh_token"])
                 return payload["access_token"]
             errors.append(payload.get("error_description") or payload.get("error") or response.text[:300])
-        raise RuntimeError("刷新 Graph 访问令牌失败：" + " | ".join(errors[-2:]))
+        detail = " | ".join(str(error) for error in errors[-2:] if error) or "服务器未返回错误详情"
+        raise RuntimeError(f"刷新 {service_name} 访问令牌失败：{detail}")
 
 
 class GraphMailClient:
@@ -81,6 +93,11 @@ class GraphMailClient:
         self.app: msal.PublicClientApplication | None = None
 
     def _ensure_msal_app(self) -> msal.PublicClientApplication | None:
+        # MSAL is only needed for interactive or cached Graph authorization.
+        # Most accounts use a refresh token, so importing it at app startup was
+        # unnecessary work (and especially visible in a one-file build).
+        import msal
+
         if self.cache is None:
             self.cache_file = EncryptedTextFile(app_data_dir() / "msal_cache.dat")
             self.cache = msal.SerializableTokenCache()
@@ -109,7 +126,7 @@ class GraphMailClient:
 
     def access_token(self, account: AccountRecord) -> str:
         if account.client_id and account.refresh_token:
-            return self.direct.refresh_access_token(account, GRAPH_REFRESH_SCOPE_OPTIONS)
+            return self.direct.refresh_access_token(account, GRAPH_REFRESH_SCOPE_OPTIONS, "Graph", "Mail.Read")
         app = self._ensure_msal_app()
         if not app:
             raise RuntimeError("没有 refresh_token，也没有全局 Client ID 授权缓存")
@@ -151,23 +168,62 @@ class ImapMailClient:
         self.direct = DirectOAuthClient(config, account_store)
 
     def latest_messages(self, account: AccountRecord, top: int) -> list[dict]:
-        token = self.direct.refresh_access_token(account, IMAP_REFRESH_SCOPE_OPTIONS)
+        token = self.direct.refresh_access_token(
+            account,
+            IMAP_REFRESH_SCOPE_OPTIONS,
+            "IMAP",
+            "IMAP.AccessAsUser.All",
+        )
+        last_error: Exception | None = None
+        for _attempt in range(2):
+            try:
+                return self._latest_messages_once(account, token, top)
+            except (imaplib.IMAP4.abort, OSError, TimeoutError) as exc:
+                last_error = exc
+        raise RuntimeError(f"IMAP 连接中断：{last_error}")
+
+    @staticmethod
+    def _response_text(data: object) -> str:
+        if isinstance(data, (list, tuple)):
+            return " ".join(ImapMailClient._response_text(item) for item in data if item)
+        if isinstance(data, bytes):
+            return data.decode("utf-8", errors="replace")
+        return str(data or "")
+
+    def _latest_messages_once(self, account: AccountRecord, token: str, top: int) -> list[dict]:
         auth = f"user={account.email}\x01auth=Bearer {token}\x01\x01"
         with imaplib.IMAP4_SSL(IMAP_HOST, 993, timeout=30) as client:
-            client.authenticate("XOAUTH2", lambda _challenge: auth.encode("utf-8"))
-            client.select("INBOX", readonly=True)
-            status, data = client.search(None, "ALL")
-            if status != "OK" or not data or not data[0]:
+            try:
+                client.authenticate("XOAUTH2", lambda _challenge: auth.encode("utf-8"))
+            except imaplib.IMAP4.error as exc:
+                detail = self._response_text(exc.args)
+                raise RuntimeError(
+                    "IMAP OAuth 认证失败。请确认 refresh_token 已授权 "
+                    f"IMAP.AccessAsUser.All，且邮箱未禁用 IMAP。服务器返回：{detail}"
+                ) from exc
+
+            status, select_data = client.select("INBOX", readonly=True)
+            if status != "OK":
+                raise RuntimeError(f"IMAP 无法打开收件箱：{self._response_text(select_data)}")
+
+            status, data = client.uid("search", None, "ALL")
+            if status != "OK":
+                raise RuntimeError(f"IMAP 搜索邮件失败：{self._response_text(data)}")
+            if not data or not data[0]:
                 return []
             ids = data[0].split()[-max(1, min(top, 50)) :]
             rows: list[dict] = []
+            fetch_errors: list[str] = []
             for msg_id in reversed(ids):
-                status, fetched = client.fetch(msg_id, "(RFC822)")
+                status, fetched = client.uid("fetch", msg_id, "(BODY.PEEK[])")
                 if status != "OK":
+                    fetch_errors.append(self._response_text(fetched))
                     continue
                 raw = next((part[1] for part in fetched if isinstance(part, tuple)), b"")
                 if raw:
                     rows.append(parse_imap_message(raw, account.email))
+            if ids and not rows and fetch_errors:
+                raise RuntimeError(f"IMAP 读取邮件失败：{fetch_errors[-1]}")
             return rows
 
 
