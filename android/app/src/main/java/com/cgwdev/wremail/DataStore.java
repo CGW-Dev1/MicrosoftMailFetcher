@@ -16,6 +16,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 
 final class DataStore {
     static final int MAX_EMAILS_PER_PHONE = 3;
@@ -23,6 +24,7 @@ final class DataStore {
     final List<AccountRecord> accounts = new ArrayList<>();
     final List<PhoneRecord> phones = new ArrayList<>();
     final List<PhoneRecord> standalonePhones = new ArrayList<>();
+    final List<AccountCategory> categories = new ArrayList<>();
     final AppConfig config = new AppConfig();
 
     private final Context context;
@@ -34,6 +36,7 @@ final class DataStore {
     }
 
     synchronized void load() {
+        loadCategories();
         loadAccounts();
         loadPhones();
         loadStandalonePhones();
@@ -56,7 +59,7 @@ final class DataStore {
                 account.refreshToken = record.refreshToken;
                 account.tag = cleanTag(record.tag);
                 account.importedAt = now;
-                account.category = Parsing.normalizeCategory(record.category);
+                account.category = resolveOrAddCategory(record.category);
                 account.used = !Constants.CATEGORY_UNUSED.equals(account.category);
                 account.lastStatus = record.refreshToken.isEmpty() ? "未取件" : "已导入";
                 accounts.add(account);
@@ -71,7 +74,7 @@ final class DataStore {
                 current.tag = cleanTag(record.tag);
                 changed = true;
             }
-            String category = Parsing.normalizeCategory(record.category);
+            String category = resolveOrAddCategory(record.category);
             if (!Constants.CATEGORY_UNUSED.equals(category) && !current.category.equals(category)) {
                 current.category = category;
                 current.used = true;
@@ -164,7 +167,10 @@ final class DataStore {
     }
 
     synchronized int setCategory(Set<String> emails, String category) {
-        String normalized = Parsing.normalizeCategory(category);
+        String normalized = resolveCategory(category);
+        if (normalized == null) {
+            normalized = Constants.CATEGORY_UNUSED;
+        }
         int changed = 0;
         for (AccountRecord account : accounts) {
             if (emails.contains(account.email) && !account.category.equals(normalized)) {
@@ -365,6 +371,119 @@ final class DataStore {
         }
     }
 
+    synchronized List<AccountCategory> categorySnapshot() {
+        List<AccountCategory> snapshot = new ArrayList<>();
+        for (AccountCategory category : categories) {
+            snapshot.add(new AccountCategory(category.key, category.label, category.protectedCategory));
+        }
+        return snapshot;
+    }
+
+    synchronized String categoryLabel(String key) {
+        String resolved = resolveCategory(key);
+        if (resolved != null) {
+            for (AccountCategory category : categories) {
+                if (category.key.equals(resolved)) {
+                    return category.label;
+                }
+            }
+        }
+        return "未使用";
+    }
+
+    synchronized String resolveCategory(String value) {
+        String raw = value == null ? "" : value.trim();
+        if (raw.isEmpty()) {
+            return Constants.CATEGORY_UNUSED;
+        }
+        for (AccountCategory category : categories) {
+            if (category.key.equalsIgnoreCase(raw) || category.label.equalsIgnoreCase(raw)) {
+                return category.key;
+            }
+        }
+        String legacy = Parsing.normalizeCategory(raw);
+        boolean knownLegacy = !Constants.CATEGORY_UNUSED.equals(legacy) || Parsing.isUnusedCategoryAlias(raw);
+        if (knownLegacy) {
+            for (AccountCategory category : categories) {
+                if (category.key.equals(legacy)) {
+                    return category.key;
+                }
+            }
+        }
+        return null;
+    }
+
+    synchronized String resolveOrAddCategory(String value) {
+        String resolved = resolveCategory(value);
+        if (resolved != null) {
+            return resolved;
+        }
+        AccountCategory added = addCategory(value);
+        return added == null ? Constants.CATEGORY_UNUSED : added.key;
+    }
+
+    synchronized AccountCategory addCategory(String label) {
+        String clean = cleanCategoryLabel(label);
+        if (clean.isEmpty()) {
+            return null;
+        }
+        for (AccountCategory category : categories) {
+            if (category.label.equalsIgnoreCase(clean)) {
+                return category;
+            }
+        }
+        String key = "custom_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        AccountCategory category = new AccountCategory(key, clean, false);
+        categories.add(category);
+        saveCategories();
+        return category;
+    }
+
+    synchronized boolean renameCategory(String key, String label) {
+        String clean = cleanCategoryLabel(label);
+        if (clean.isEmpty()) {
+            return false;
+        }
+        for (AccountCategory category : categories) {
+            if (!category.key.equals(key) && category.label.equalsIgnoreCase(clean)) {
+                return false;
+            }
+        }
+        for (AccountCategory category : categories) {
+            if (category.key.equals(key) && !category.protectedCategory) {
+                category.label = clean;
+                saveCategories();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    synchronized int deleteCategory(String key) {
+        AccountCategory target = null;
+        for (AccountCategory category : categories) {
+            if (category.key.equals(key)) {
+                target = category;
+                break;
+            }
+        }
+        if (target == null || target.protectedCategory) {
+            return -1;
+        }
+        int moved = 0;
+        for (AccountRecord account : accounts) {
+            if (account.category.equals(target.key)) {
+                account.category = Constants.CATEGORY_UNUSED;
+                account.used = false;
+                moved++;
+            }
+        }
+        categories.remove(target);
+        saveCategories();
+        saveAccounts();
+        return moved;
+    }
+
     synchronized String exportAccountsText() {
         StringBuilder builder = new StringBuilder();
         String currentCategory = "";
@@ -377,7 +496,7 @@ final class DataStore {
             return left.email.compareToIgnoreCase(right.email);
         });
         for (AccountRecord account : sorted) {
-            String label = account.categoryLabel();
+            String label = categoryLabel(account.category);
             if (!account.category.equals(currentCategory)) {
                 if (builder.length() > 0) {
                     builder.append("\n\n");
@@ -429,6 +548,86 @@ final class DataStore {
             sortAccounts();
         } catch (Exception ignored) {
             accounts.clear();
+        }
+    }
+
+    private void loadCategories() {
+        categories.clear();
+        File file = categoriesFile();
+        if (file.exists()) {
+            try {
+                JSONArray array = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8))
+                        .optJSONArray("categories");
+                if (array != null) {
+                    Set<String> keys = new HashSet<>();
+                    Set<String> labels = new HashSet<>();
+                    for (int i = 0; i < array.length(); i++) {
+                        JSONObject json = array.optJSONObject(i);
+                        if (json == null) {
+                            continue;
+                        }
+                        String key = json.optString("key", "").trim();
+                        String label = cleanCategoryLabel(json.optString("label", ""));
+                        String lowerKey = key.toLowerCase(Locale.ROOT);
+                        String lowerLabel = label.toLowerCase(Locale.ROOT);
+                        if (key.isEmpty() || label.isEmpty() || keys.contains(lowerKey) || labels.contains(lowerLabel)) {
+                            continue;
+                        }
+                        boolean protectedCategory = Constants.CATEGORY_UNUSED.equals(key);
+                        categories.add(new AccountCategory(key, label, protectedCategory));
+                        keys.add(lowerKey);
+                        labels.add(lowerLabel);
+                    }
+                }
+            } catch (Exception ignored) {
+                categories.clear();
+            }
+        }
+        ensureDefaultCategories();
+        saveCategories();
+    }
+
+    private void ensureDefaultCategories() {
+        if (categories.isEmpty()) {
+            for (int i = 0; i < Constants.CATEGORY_ORDER.length; i++) {
+                String key = Constants.CATEGORY_ORDER[i];
+                categories.add(new AccountCategory(key, Constants.CATEGORY_LABELS[i], Constants.CATEGORY_UNUSED.equals(key)));
+            }
+            return;
+        }
+        boolean hasUnused = false;
+        for (AccountCategory category : categories) {
+            if (Constants.CATEGORY_UNUSED.equals(category.key)) {
+                hasUnused = true;
+                break;
+            }
+        }
+        if (!hasUnused) {
+            categories.add(0, new AccountCategory(Constants.CATEGORY_UNUSED, "未使用", true));
+        }
+        for (int i = 0; i < categories.size(); i++) {
+            if (Constants.CATEGORY_UNUSED.equals(categories.get(i).key) && i != 0) {
+                AccountCategory unused = categories.remove(i);
+                categories.add(0, unused);
+                break;
+            }
+        }
+    }
+
+    private void saveCategories() {
+        try {
+            JSONArray array = new JSONArray();
+            for (AccountCategory category : categories) {
+                JSONObject json = new JSONObject();
+                json.put("key", category.key);
+                json.put("label", category.label);
+                json.put("protected", category.protectedCategory);
+                array.put(json);
+            }
+            JSONObject root = new JSONObject().put("categories", array);
+            Files.write(categoriesFile().toPath(), root.toString(2).getBytes(StandardCharsets.UTF_8));
+        } catch (Exception exc) {
+            throw new IllegalStateException("保存分类失败：" + exc.getMessage(), exc);
         }
     }
 
@@ -539,7 +738,9 @@ final class DataStore {
         account.lastFetchAt = json.optString("last_fetch_at", "");
         account.lastStatus = json.optString("last_status", "未取件");
         account.used = json.optBoolean("used", false);
-        account.category = Parsing.normalizeCategory(json.optString("category", account.used ? Constants.CATEGORY_PLUS : Constants.CATEGORY_UNUSED));
+        String storedCategory = json.optString("category", account.used ? Constants.CATEGORY_PLUS : Constants.CATEGORY_UNUSED);
+        String resolvedCategory = resolveCategory(storedCategory);
+        account.category = resolvedCategory == null ? Constants.CATEGORY_UNUSED : resolvedCategory;
         return account;
     }
 
@@ -648,9 +849,9 @@ final class DataStore {
     }
 
     private int categoryIndex(String category) {
-        String normalized = Parsing.normalizeCategory(category);
-        for (int i = 0; i < Constants.CATEGORY_ORDER.length; i++) {
-            if (Constants.CATEGORY_ORDER[i].equals(normalized)) {
+        String resolved = resolveCategory(category);
+        for (int i = 0; i < categories.size(); i++) {
+            if (categories.get(i).key.equals(resolved)) {
                 return i;
             }
         }
@@ -659,6 +860,14 @@ final class DataStore {
 
     private String cleanTag(String tag) {
         return Parsing.compact(tag == null ? "" : tag.replaceAll("\\s+", " "), 40);
+    }
+
+    private String cleanCategoryLabel(String label) {
+        String clean = label == null ? "" : label.trim().replaceAll("\\s+", " ");
+        if (clean.startsWith("#") || clean.contains("----")) {
+            return "";
+        }
+        return Parsing.compact(clean, 24);
     }
 
     private boolean setIfPresent(AccountRecord account, String field, String value) {
@@ -691,5 +900,9 @@ final class DataStore {
 
     private File configFile() {
         return new File(context.getFilesDir(), "config.json");
+    }
+
+    private File categoriesFile() {
+        return new File(context.getFilesDir(), "categories.json");
     }
 }

@@ -18,24 +18,22 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsets;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -148,7 +146,7 @@ public class MainActivity extends Activity {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(colorBg());
-        root.setPadding(dp(10), dp(8), dp(10), dp(8));
+        root.setPadding(dp(12), dp(10), dp(12), dp(8));
         applySystemBarInsets(root);
         setContentView(root);
 
@@ -178,9 +176,9 @@ public class MainActivity extends Activity {
     }
 
     private void applySystemBarInsets(View view) {
-        final int baseLeft = dp(10);
-        final int baseTop = dp(8);
-        final int baseRight = dp(10);
+        final int baseLeft = dp(12);
+        final int baseTop = dp(10);
+        final int baseRight = dp(12);
         final int baseBottom = dp(8);
         view.setOnApplyWindowInsetsListener((target, insets) -> {
             int left;
@@ -206,17 +204,38 @@ public class MainActivity extends Activity {
     }
 
     private View buildHeader() {
-        LinearLayout header = vertical();
-        header.setPadding(dp(12), dp(10), dp(12), dp(10));
+        LinearLayout header = horizontal();
+        header.setPadding(dp(12), dp(9), dp(10), dp(9));
         header.setBackground(cardBg());
 
-        TextView title = label(Constants.DISPLAY_NAME + " " + Constants.APP_VERSION, 19, Typeface.BOLD);
-        header.addView(title, matchWrap());
+        ImageView icon = new ImageView(this);
+        icon.setImageDrawable(getApplicationInfo().loadIcon(getPackageManager()));
+        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        icon.setContentDescription("应用图标");
+        header.addView(icon, new LinearLayout.LayoutParams(dp(42), dp(42)));
 
-        statusView = label("就绪", 12, Typeface.NORMAL);
-        statusView.setTextColor(colorMuted());
-        LinearLayout.LayoutParams statusParams = matchWrap();
-        statusParams.topMargin = dp(4);
+        LinearLayout identity = vertical();
+        TextView title = label(Constants.DISPLAY_NAME, 17, Typeface.BOLD);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        TextView subtitle = label("移动取件工作台 · " + Constants.APP_VERSION, 11, Typeface.NORMAL);
+        subtitle.setTextColor(colorMuted());
+        subtitle.setSingleLine(true);
+        subtitle.setEllipsize(TextUtils.TruncateAt.END);
+        identity.addView(title, matchWrap());
+        identity.addView(subtitle, matchWrap());
+        LinearLayout.LayoutParams identityParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        identityParams.leftMargin = dp(10);
+        header.addView(identity, identityParams);
+
+        statusView = badge("就绪", colorBlue());
+        float density = getResources().getDisplayMetrics().density;
+        int widthDp = Math.round(getResources().getDisplayMetrics().widthPixels / density);
+        statusView.setMaxWidth(dp(widthDp < 360 ? 86 : 132));
+        statusView.setSingleLine(true);
+        statusView.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams statusParams = wrapWrap();
+        statusParams.leftMargin = dp(8);
         header.addView(statusView, statusParams);
         return header;
     }
@@ -243,6 +262,8 @@ public class MainActivity extends Activity {
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progressBar.setMax(100);
         progressBar.setProgress(0);
+        progressBar.setProgressTintList(android.content.res.ColorStateList.valueOf(colorBlue()));
+        progressBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(colorBorder()));
         progressBar.setVisibility(View.GONE);
         box.addView(progressText, matchWrap());
         LinearLayout.LayoutParams barParams = matchWrap();
@@ -254,7 +275,7 @@ public class MainActivity extends Activity {
     private void addTab(String label, String target) {
         Button button = button(label, target.equals(page) ? "nav-active" : "nav");
         button.setOnClickListener(v -> showPage(target));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(52), 1);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1);
         params.leftMargin = dp(3);
         params.rightMargin = dp(3);
         tabBar.addView(button, params);
@@ -295,7 +316,9 @@ public class MainActivity extends Activity {
         content.addView(scroll(pageBox), matchMatch());
         latestCodeBox = null;
 
-        pageBox.addView(statsCard(), matchWrap());
+        pageBox.addView(pageHeader("取件", "选择邮箱与通道，验证码会集中显示在结果页"), matchWrap());
+
+        pageBox.addView(statsCard(), spaced());
 
         latestCodeBox = vertical();
         latestCodeBox.addView(latestCodeCard(), matchWrap());
@@ -309,11 +332,15 @@ public class MainActivity extends Activity {
     }
 
     private void renderMailboxesPage() {
+        String resolvedCategory = store.resolveCategory(currentCategory);
+        currentCategory = resolvedCategory == null ? Constants.CATEGORY_UNUSED : resolvedCategory;
         LinearLayout pageBox = vertical();
         pageBox.setPadding(0, 0, 0, dp(16));
         content.addView(scroll(pageBox), matchMatch());
 
-        pageBox.addView(mailboxHeaderCard(), matchWrap());
+        pageBox.addView(pageHeader("邮箱库", "分类、标签与手机号绑定统一管理"), matchWrap());
+
+        pageBox.addView(mailboxHeaderCard(), spaced());
 
         EditText search = edit("搜索邮箱、标签、状态或手机号");
         search.setText(accountQuery);
@@ -415,6 +442,40 @@ public class MainActivity extends Activity {
         right.setTextColor(colorMuted());
         row.addView(right, wrapWrap());
         return row;
+    }
+
+    private View pageHeader(String title, String subtitle) {
+        LinearLayout box = vertical();
+        box.setPadding(dp(2), dp(14), dp(2), dp(4));
+        TextView heading = label(title, 21, Typeface.BOLD);
+        TextView supporting = label(subtitle, 12, Typeface.NORMAL);
+        supporting.setTextColor(colorMuted());
+        supporting.setPadding(0, dp(2), 0, 0);
+        box.addView(heading, matchWrap());
+        box.addView(supporting, matchWrap());
+        return box;
+    }
+
+    private View actionGrid(Button... buttons) {
+        LinearLayout grid = vertical();
+        for (int i = 0; i < buttons.length; i += 2) {
+            LinearLayout row = horizontal();
+            row.addView(buttons[i], equalButtonParams(2, 0));
+            if (i + 1 < buttons.length) {
+                row.addView(buttons[i + 1], equalButtonParams(2, 1));
+            } else {
+                View spacer = new View(this);
+                row.addView(spacer, equalButtonParams(2, 1));
+            }
+            if (i > 0) {
+                LinearLayout.LayoutParams rowParams = matchWrap();
+                rowParams.topMargin = dp(8);
+                grid.addView(row, rowParams);
+            } else {
+                grid.addView(row, matchWrap());
+            }
+        }
+        return grid;
     }
 
     private View mailboxHeaderCard() {
@@ -585,11 +646,12 @@ public class MainActivity extends Activity {
         card.addView(settingRow("每次取件", store.config.top + " 封", v -> chooseTopCount()), topSettingParams);
         card.addView(settingRow("协议", store.config.protocol.equalsIgnoreCase("IMAP") ? "IMAP 优先" : "Graph 优先", v -> chooseProtocol()), matchWrap());
 
-        LinearLayout primaryActions = horizontal();
-        primaryActions.addView(button("全部取件", "primary", v -> fetchAccounts(emailsOf(store.accounts))), equalButtonParams(4, 0));
-        primaryActions.addView(button("取选中", "primary", v -> fetchSelected()), equalButtonParams(4, 1));
-        primaryActions.addView(button("选择邮箱", "secondary", v -> showFetchAccountPicker()), equalButtonParams(4, 2));
-        primaryActions.addView(button("停止", "danger", v -> requestStop()), equalButtonParams(4, 3));
+        View primaryActions = actionGrid(
+                button("全部取件", "primary", v -> fetchAccounts(emailsOf(store.accounts))),
+                button("取选中", "primary", v -> fetchSelected()),
+                button("选择邮箱", "secondary", v -> showFetchAccountPicker()),
+                button("停止", "danger", v -> requestStop())
+        );
         LinearLayout.LayoutParams primaryParams = matchWrap();
         primaryParams.topMargin = dp(12);
         card.addView(primaryActions, primaryParams);
@@ -604,11 +666,12 @@ public class MainActivity extends Activity {
         TextView title = label("账号管理", 14, Typeface.BOLD);
         card.addView(title, matchWrap());
 
-        LinearLayout actions = horizontal();
-        actions.addView(button("移动分类", "secondary", v -> showMoveDialog()), equalButtonParams(4, 0));
-        actions.addView(button("导出账号", "secondary", v -> exportAccounts()), equalButtonParams(4, 1));
-        actions.addView(button("删除选中", "danger", v -> deleteSelectedAccounts()), equalButtonParams(4, 2));
-        actions.addView(button("清空账号", "danger", v -> clearAccounts()), equalButtonParams(4, 3));
+        ViewGroup actions = horizontalWrap();
+        actions.addView(button("移动分类", "secondary", v -> showMoveDialog()), buttonParams());
+        actions.addView(button("管理分类", "secondary", v -> showCategoryManager()), buttonParams());
+        actions.addView(button("导出账号", "secondary", v -> exportAccounts()), buttonParams());
+        actions.addView(button("删除选中", "danger", v -> deleteSelectedAccounts()), buttonParams());
+        actions.addView(button("清空账号", "danger", v -> clearAccounts()), buttonParams());
         LinearLayout.LayoutParams actionParams = matchWrap();
         actionParams.topMargin = dp(6);
         card.addView(actions, actionParams);
@@ -616,18 +679,24 @@ public class MainActivity extends Activity {
     }
 
     private View categoryBar() {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
         LinearLayout row = horizontal();
-        for (int i = 0; i < Constants.CATEGORY_ORDER.length; i++) {
-            String category = Constants.CATEGORY_ORDER[i];
-            String text = Constants.CATEGORY_LABELS[i] + " " + countCategory(category);
-            Button button = button(text, category.equals(currentCategory) ? "primary" : "secondary");
+        List<AccountCategory> categories = store.categorySnapshot();
+        for (AccountCategory category : categories) {
+            String text = category.label + "  " + countCategory(category.key);
+            Button button = button(text, category.key.equals(currentCategory) ? "segment-active" : "segment");
             button.setOnClickListener(v -> {
-                currentCategory = category;
+                currentCategory = category.key;
                 showPage("mailboxes");
             });
-            row.addView(button, equalButtonParams(Constants.CATEGORY_ORDER.length, i));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42));
+            params.rightMargin = dp(8);
+            row.addView(button, params);
         }
-        return row;
+        scroll.addView(row, new HorizontalScrollView.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return scroll;
     }
 
     private void renderAccountList() {
@@ -636,7 +705,7 @@ public class MainActivity extends Activity {
         }
         accountListBox.removeAllViews();
         List<AccountRecord> accounts = filteredAccounts();
-        TextView count = label("当前 " + Constants.categoryLabel(currentCategory) + "：" + accounts.size() + " 个账号", 13, Typeface.BOLD);
+        TextView count = label("当前 " + store.categoryLabel(currentCategory) + "：" + accounts.size() + " 个账号", 13, Typeface.BOLD);
         count.setTextColor(colorMuted());
         accountListBox.addView(count, spaced());
         if (accounts.isEmpty()) {
@@ -671,21 +740,23 @@ public class MainActivity extends Activity {
         textBox.addView(email, matchWrap());
         String phone = account.phone.isEmpty() ? "" : " · " + account.phone;
         String tag = account.tag.isEmpty() ? "" : " · 标签:" + account.tag;
-        TextView meta = label(account.categoryLabel() + " · " + account.source() + phone + tag + " · " + account.lastStatus, 12, Typeface.NORMAL);
+        TextView meta = label(store.categoryLabel(account.category) + " · " + account.source() + phone + tag + " · " + account.lastStatus, 12, Typeface.NORMAL);
         meta.setTextColor(colorMuted());
         textBox.addView(meta, matchWrap());
         top.addView(textBox, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         card.addView(top, matchWrap());
 
-        LinearLayout actions = horizontal();
-        actions.addView(button("邮件", "primary", v -> fetchAccounts(singleton(account.email))), equalButtonParams(4, 0));
-        Button phoneButton = button("手机", account.phone.isEmpty() ? "disabled" : "primary", v -> fetchAccountPhone(account.email));
+        Button mailButton = button("邮件取件", "primary", v -> fetchAccounts(singleton(account.email)));
+        Button phoneButton = button("手机取码", account.phone.isEmpty() ? "disabled" : "primary", v -> fetchAccountPhone(account.email));
         phoneButton.setEnabled(!account.phone.isEmpty());
-        actions.addView(phoneButton, equalButtonParams(4, 1));
-        actions.addView(button("复制邮箱", "secondary", v -> copy(account.email, "已复制邮箱")), equalButtonParams(4, 2));
         String tagButtonText = account.tag.isEmpty() ? "标签" : Parsing.compact(account.tag, 8);
         String tagButtonRole = account.tag.isEmpty() ? "secondary" : "tagged";
-        actions.addView(button(tagButtonText, tagButtonRole, v -> editTag(account)), equalButtonParams(4, 3));
+        View actions = actionGrid(
+                mailButton,
+                phoneButton,
+                button("复制邮箱", "secondary", v -> copy(account.email, "已复制邮箱")),
+                button(tagButtonText, tagButtonRole, v -> editTag(account))
+        );
         LinearLayout.LayoutParams params = matchWrap();
         params.topMargin = dp(8);
         card.addView(actions, params);
@@ -697,8 +768,7 @@ public class MainActivity extends Activity {
         content.addView(scroll(pageBox), matchMatch());
 
         LinearLayout header = horizontal();
-        TextView title = label("取件结果", 20, Typeface.BOLD);
-        header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        header.addView(pageHeader("验证码与邮件", "按通道筛选、搜索并复制结果"), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         header.addView(button("导出", "primary", v -> exportResultsCsv()), wrapWrap());
         pageBox.addView(header, matchWrap());
 
@@ -850,6 +920,8 @@ public class MainActivity extends Activity {
         LinearLayout pageBox = vertical();
         content.addView(scroll(pageBox), matchMatch());
 
+        pageBox.addView(pageHeader("手机号管理", "维护 API、邮箱绑定和验证码状态"), matchWrap());
+
         EditText search = edit("搜索手机号、API、绑定邮箱或状态");
         search.setText(phoneQuery);
         search.addTextChangedListener(new SimpleWatcher() {
@@ -859,7 +931,7 @@ public class MainActivity extends Activity {
                 renderPhoneList();
             }
         });
-        pageBox.addView(search, matchWrap());
+        pageBox.addView(search, spaced());
 
         ViewGroup actions = horizontalWrap();
         actions.addView(button("粘贴导入", "primary", v -> showPasteDialog("导入手机号", false, false)), buttonParams());
@@ -904,23 +976,25 @@ public class MainActivity extends Activity {
             code.setTextColor(colorBlue());
             card.addView(code, matchWrap());
         }
-        ViewGroup actions = horizontalWrap();
-        actions.addView(button("取码", "primary", v -> fetchPhone(phone, false, true)), buttonParams());
-        actions.addView(button("绑定邮箱", "secondary", v -> showBindDialog(phone)), buttonParams());
-        actions.addView(button("清空绑定", "secondary", v -> {
+        Button clearBindings = button("清空绑定", "secondary", v -> {
             store.clearPhoneBindings(phone.phone);
             showStatus("已清空绑定：" + phone.phone);
             renderPhoneList();
             if ("mailboxes".equals(page)) {
                 renderAccountList();
             }
-        }), buttonParams());
-        actions.addView(button("复制", "secondary", v -> copy(phone.phone, "已复制手机号")), buttonParams());
-        actions.addView(button("删除", "danger", v -> confirm("删除手机号", "确定删除 " + phone.phone + " 吗？", () -> {
-            store.removePhone(phone.phone);
-            renderPhoneList();
-            showStatus("已删除手机号");
-        })), buttonParams());
+        });
+        View actions = actionGrid(
+                button("获取验证码", "primary", v -> fetchPhone(phone, false, true)),
+                button("绑定邮箱", "secondary", v -> showBindDialog(phone)),
+                button("复制手机号", "secondary", v -> copy(phone.phone, "已复制手机号")),
+                clearBindings,
+                button("删除手机号", "danger", v -> confirm("删除手机号", "确定删除 " + phone.phone + " 吗？", () -> {
+                    store.removePhone(phone.phone);
+                    renderPhoneList();
+                    showStatus("已删除手机号");
+                }))
+        );
         LinearLayout.LayoutParams params = matchWrap();
         params.topMargin = dp(8);
         card.addView(actions, params);
@@ -931,6 +1005,8 @@ public class MainActivity extends Activity {
         LinearLayout pageBox = vertical();
         content.addView(scroll(pageBox), matchMatch());
 
+        pageBox.addView(pageHeader("手机号取码", "独立于邮箱账号，批量获取并复制短信验证码"), matchWrap());
+
         EditText search = edit("搜索手机号、验证码、短信内容或状态");
         search.setText(standaloneQuery);
         search.addTextChangedListener(new SimpleWatcher() {
@@ -940,7 +1016,7 @@ public class MainActivity extends Activity {
                 renderStandaloneList();
             }
         });
-        pageBox.addView(search, matchWrap());
+        pageBox.addView(search, spaced());
 
         ViewGroup importRow = horizontalWrap();
         importRow.addView(button("粘贴导入", "primary", v -> showPasteDialog("独立导入手机号", false, true)), buttonParams());
@@ -1009,20 +1085,22 @@ public class MainActivity extends Activity {
             message.setTextColor(colorMuted());
             card.addView(message, matchWrap());
         }
-        ViewGroup actions = horizontalWrap();
-        actions.addView(button("取码", "primary", v -> fetchPhone(phone, true, false)), buttonParams());
+        Button fetch = button("获取验证码", "primary", v -> fetchPhone(phone, true, false));
         Button copyCode = button("复制码", phone.lastCode.isEmpty() ? "disabled" : "secondary", v -> copy(phone.lastCode, "已复制验证码"));
         copyCode.setEnabled(!phone.lastCode.isEmpty());
-        actions.addView(copyCode, buttonParams());
-        actions.addView(button("复制号", "secondary", v -> copy(phone.phone, "已复制手机号")), buttonParams());
         Button copySms = button("复制短信", phone.lastMessage.isEmpty() ? "disabled" : "secondary", v -> copy(phone.lastMessage, "已复制短信"));
         copySms.setEnabled(!phone.lastMessage.isEmpty());
-        actions.addView(copySms, buttonParams());
-        actions.addView(button("删除", "danger", v -> confirm("删除手机号", "确定删除 " + phone.phone + " 吗？", () -> {
-            store.removeStandalonePhone(phone.phone);
-            selectedStandalonePhones.remove(phone.phone);
-            renderStandaloneList();
-        })), buttonParams());
+        View actions = actionGrid(
+                fetch,
+                copyCode,
+                button("复制手机号", "secondary", v -> copy(Parsing.phoneWithoutCountryCode(phone.phone), "已复制手机号")),
+                copySms,
+                button("删除手机号", "danger", v -> confirm("删除手机号", "确定删除 " + phone.phone + " 吗？", () -> {
+                    store.removeStandalonePhone(phone.phone);
+                    selectedStandalonePhones.remove(phone.phone);
+                    renderStandaloneList();
+                }))
+        );
         LinearLayout.LayoutParams params = matchWrap();
         params.topMargin = dp(8);
         card.addView(actions, params);
@@ -1034,62 +1112,83 @@ public class MainActivity extends Activity {
         pageBox.setPadding(0, 0, 0, dp(12));
         content.addView(scroll(pageBox), matchMatch());
 
-        TextView title = label("取件设置", 18, Typeface.BOLD);
-        pageBox.addView(title, spaced());
+        pageBox.addView(pageHeader("设置", "配置取件协议、显示模式与常用入口"), matchWrap());
 
         pageBox.addView(settingsEntryCard(), spaced());
 
+        LinearLayout connectionCard = vertical();
+        connectionCard.setPadding(dp(12), dp(12), dp(12), dp(12));
+        connectionCard.setBackground(cardBg());
+        connectionCard.addView(label("连接与取件", 15, Typeface.BOLD), matchWrap());
+
         EditText clientId = edit("全局 Client ID（可空）");
         clientId.setText(store.config.clientId);
-        pageBox.addView(clientId, spaced());
+        connectionCard.addView(clientId, spaced());
 
         EditText tenant = edit("Tenant，例如 consumers");
         tenant.setText(store.config.tenant);
-        pageBox.addView(tenant, spaced());
+        connectionCard.addView(tenant, spaced());
 
         TextView protocolLabel = label("协议", 13, Typeface.BOLD);
         protocolLabel.setTextColor(colorMuted());
-        pageBox.addView(protocolLabel, spaced());
-        RadioGroup protocol = new RadioGroup(this);
-        protocol.setOrientation(RadioGroup.HORIZONTAL);
-        RadioButton graph = radio("Graph令牌");
-        graph.setId(1);
-        RadioButton imap = radio("IMAP令牌");
-        imap.setId(2);
-        protocol.addView(graph, wrapWrap());
-        protocol.addView(imap, wrapWrap());
-        protocol.check("IMAP".equalsIgnoreCase(store.config.protocol) ? 2 : 1);
-        pageBox.addView(protocol, spaced());
+        connectionCard.addView(protocolLabel, spaced());
+        String[] draftProtocol = {"IMAP".equalsIgnoreCase(store.config.protocol) ? "IMAP" : "Graph"};
+        LinearLayout protocol = horizontal();
+        Runnable[] renderProtocol = new Runnable[1];
+        renderProtocol[0] = () -> {
+            protocol.removeAllViews();
+            Button graph = button("Graph 令牌", "Graph".equals(draftProtocol[0]) ? "segment-active" : "segment", v -> {
+                draftProtocol[0] = "Graph";
+                renderProtocol[0].run();
+            });
+            Button imap = button("IMAP 令牌", "IMAP".equals(draftProtocol[0]) ? "segment-active" : "segment", v -> {
+                draftProtocol[0] = "IMAP";
+                renderProtocol[0].run();
+            });
+            protocol.addView(graph, equalButtonParams(2, 0));
+            protocol.addView(imap, equalButtonParams(2, 1));
+        };
+        renderProtocol[0].run();
+        connectionCard.addView(protocol, spaced());
 
         TextView topLabel = label("每个账号读取封数", 13, Typeface.BOLD);
         topLabel.setTextColor(colorMuted());
-        pageBox.addView(topLabel, spaced());
-        Spinner top = new Spinner(this);
-        String[] topValues = {"1", "5", "10", "20", "30", "50"};
-        top.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, topValues));
-        int selected = 2;
-        for (int i = 0; i < topValues.length; i++) {
-            if (Integer.parseInt(topValues[i]) == store.config.top) {
-                selected = i;
-                break;
-            }
-        }
-        top.setSelection(selected);
-        pageBox.addView(top, spaced());
+        connectionCard.addView(topLabel, spaced());
+        int[] draftTop = {store.config.top};
+        Button top = button(draftTop[0] + " 封", "secondary");
+        top.setOnClickListener(v -> {
+            String[] values = {"1 封", "5 封", "10 封", "20 封", "30 封", "50 封"};
+            int[] numbers = {1, 5, 10, 20, 30, 50};
+            AlertDialog dialog = new AlertDialog.Builder(this)
+                    .setTitle("每个账号读取封数")
+                    .setItems(values, (opened, which) -> {
+                        draftTop[0] = numbers[which];
+                        top.setText(values[which]);
+                    })
+                    .create();
+            showThemedDialog(dialog);
+        });
+        connectionCard.addView(top, spaced());
+        pageBox.addView(connectionCard, spaced());
 
+        LinearLayout displayCard = vertical();
+        displayCard.setPadding(dp(12), dp(12), dp(12), dp(12));
+        displayCard.setBackground(cardBg());
+        displayCard.addView(label("体验偏好", 15, Typeface.BOLD), matchWrap());
         CheckBox autoFetch = checkbox("导入后自动取件", store.config.autoFetchAfterImport);
-        pageBox.addView(autoFetch, spaced());
+        displayCard.addView(autoFetch, spaced());
         CheckBox concise = checkbox("简洁模式：只提取最新验证码", store.config.conciseMode);
-        pageBox.addView(concise, spaced());
+        displayCard.addView(concise, spaced());
         CheckBox dark = checkbox("深色模式", store.config.darkTheme);
-        pageBox.addView(dark, spaced());
+        displayCard.addView(dark, spaced());
+        pageBox.addView(displayCard, spaced());
 
         Button save = button("保存设置", "primary", v -> {
             boolean themeChanged = store.config.darkTheme != dark.isChecked();
             store.config.clientId = clientId.getText().toString().trim();
             store.config.tenant = tenant.getText().toString().trim().isEmpty() ? "consumers" : tenant.getText().toString().trim();
-            store.config.protocol = protocol.getCheckedRadioButtonId() == 2 ? "IMAP" : "Graph";
-            store.config.top = Integer.parseInt(String.valueOf(top.getSelectedItem()));
+            store.config.protocol = draftProtocol[0];
+            store.config.top = draftTop[0];
             store.config.autoFetchAfterImport = autoFetch.isChecked();
             store.config.conciseMode = concise.isChecked();
             store.config.darkTheme = dark.isChecked();
@@ -1457,18 +1556,133 @@ public class MainActivity extends Activity {
             toast("请先选择账号");
             return;
         }
-        new AlertDialog.Builder(this)
+        List<AccountCategory> categories = store.categorySnapshot();
+        String[] labels = new String[categories.size()];
+        for (int i = 0; i < categories.size(); i++) {
+            labels[i] = categories.get(i).label;
+        }
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("移动到分类")
-                .setItems(Constants.CATEGORY_LABELS, (dialog, which) -> {
+                .setItems(labels, (opened, which) -> {
+                    AccountCategory target = categories.get(which);
                     Set<String> selected = new HashSet<>(selectedEmails);
-                    int changed = store.setCategory(selected, Constants.CATEGORY_ORDER[which]);
+                    int changed = store.setCategory(selected, target.key);
                     for (String email : selected) {
                         selectedEmails.remove(email);
                     }
-                    showStatus("已移动 " + changed + " 个账号到 " + Constants.CATEGORY_LABELS[which]);
+                    showStatus("已移动 " + changed + " 个账号到 " + target.label);
                     showPage("mailboxes");
                 })
-                .show();
+                .create();
+        showThemedDialog(dialog);
+    }
+
+    private void showCategoryManager() {
+        AlertDialog[] managerRef = new AlertDialog[1];
+        LinearLayout panel = vertical();
+        panel.setPadding(dp(18), dp(16), dp(18), dp(10));
+        panel.setBackgroundColor(colorSurface());
+
+        TextView title = label("管理邮箱分类", 20, Typeface.BOLD);
+        panel.addView(title, matchWrap());
+        TextView hint = label("分类会同步用于导入、导出、筛选和批量移动。", 12, Typeface.NORMAL);
+        hint.setTextColor(colorMuted());
+        panel.addView(hint, spaced());
+
+        LinearLayout rows = vertical();
+        for (AccountCategory category : store.categorySnapshot()) {
+            LinearLayout row = horizontal();
+            row.setPadding(dp(10), dp(8), dp(8), dp(8));
+            row.setBackground(softCardBg());
+
+            LinearLayout text = vertical();
+            TextView name = label(category.label, 14, Typeface.BOLD);
+            TextView meta = label(countCategory(category.key) + " 个邮箱" + (category.protectedCategory ? " · 系统分类" : ""), 11, Typeface.NORMAL);
+            meta.setTextColor(colorMuted());
+            text.addView(name, matchWrap());
+            text.addView(meta, matchWrap());
+            row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+            if (!category.protectedCategory) {
+                Button rename = button("重命名", "secondary", v -> {
+                    if (managerRef[0] != null) {
+                        managerRef[0].dismiss();
+                    }
+                    showCategoryPrompt("重命名分类", category);
+                });
+                row.addView(rename, new LinearLayout.LayoutParams(dp(78), dp(40)));
+                Button delete = button("删除", "danger", v -> {
+                    if (managerRef[0] != null) {
+                        managerRef[0].dismiss();
+                    }
+                    confirm(
+                            "删除分类",
+                            "分类中的邮箱会移到“未使用”，确定删除“" + category.label + "”吗？",
+                            () -> {
+                                int moved = store.deleteCategory(category.key);
+                                if (category.key.equals(currentCategory)) {
+                                    currentCategory = Constants.CATEGORY_UNUSED;
+                                }
+                                showStatus("已删除分类，" + Math.max(0, moved) + " 个邮箱移到未使用");
+                                showPage("mailboxes");
+                            });
+                });
+                LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(dp(66), dp(40));
+                deleteParams.leftMargin = dp(6);
+                row.addView(delete, deleteParams);
+            }
+            rows.addView(row, spaced());
+        }
+        ScrollView listScroll = new ScrollView(this);
+        listScroll.addView(rows, matchWrap());
+        LinearLayout.LayoutParams listParams = matchWrap();
+        listParams.height = Math.min(dp(420), (int) (getResources().getDisplayMetrics().heightPixels * 0.52f));
+        panel.addView(listScroll, listParams);
+
+        Button add = button("新建分类", "primary", v -> {
+            if (managerRef[0] != null) {
+                managerRef[0].dismiss();
+            }
+            showCategoryPrompt("新建分类", null);
+        });
+        panel.addView(add, spaced());
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(panel)
+                .setNegativeButton("关闭", null)
+                .create();
+        managerRef[0] = dialog;
+        showThemedDialog(dialog);
+    }
+
+    private void showCategoryPrompt(String title, AccountCategory category) {
+        EditText input = edit("输入分类名称，最多 24 个字");
+        input.setText(category == null ? "" : category.label);
+        input.setSelectAllOnFocus(true);
+        LinearLayout box = vertical();
+        box.setPadding(dp(18), dp(8), dp(18), 0);
+        box.addView(input, matchWrap());
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setView(box)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("保存", (opened, which) -> {
+                    String value = input.getText().toString();
+                    boolean ok;
+                    if (category == null) {
+                        ok = store.addCategory(value) != null;
+                    } else {
+                        ok = store.renameCategory(category.key, value);
+                    }
+                    if (!ok) {
+                        toast("分类名称无效或已经存在");
+                    } else {
+                        showStatus(category == null ? "已新建分类" : "已重命名分类");
+                        showPage("mailboxes");
+                    }
+                })
+                .create();
+        showThemedDialog(dialog);
     }
 
     private void showFetchAccountPicker() {
@@ -1502,7 +1716,11 @@ public class MainActivity extends Activity {
         panel.addView(header, matchWrap());
 
         LinearLayout categoryRow = horizontal();
-        panel.addView(categoryRow, spaced());
+        HorizontalScrollView categoryScroll = new HorizontalScrollView(this);
+        categoryScroll.setHorizontalScrollBarEnabled(false);
+        categoryScroll.addView(categoryRow, new HorizontalScrollView.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        panel.addView(categoryScroll, spaced());
 
         TextView hint = label(accountQuery.trim().isEmpty()
                 ? "当前未使用首页搜索过滤"
@@ -1585,24 +1803,25 @@ public class MainActivity extends Activity {
 
     private void renderFetchPickerCategories(LinearLayout categoryRow, String[] current, Set<String> draft, Runnable refreshList) {
         categoryRow.removeAllViews();
-        for (int i = 0; i < Constants.CATEGORY_ORDER.length; i++) {
-            String category = Constants.CATEGORY_ORDER[i];
-            int total = fetchCandidateAccounts(category).size();
-            int selected = countSelectedInCategory(category, draft);
-            String text = Constants.CATEGORY_LABELS[i] + " " + total + (selected > 0 ? " / " + selected : "");
-            Button chip = button(text, category.equals(current[0]) ? "primary" : "secondary");
+        for (AccountCategory category : store.categorySnapshot()) {
+            int total = fetchCandidateAccounts(category.key).size();
+            int selected = countSelectedInCategory(category.key, draft);
+            String text = category.label + " " + total + (selected > 0 ? " / " + selected : "");
+            Button chip = button(text, category.key.equals(current[0]) ? "segment-active" : "segment");
             chip.setOnClickListener(v -> {
-                current[0] = category;
+                current[0] = category.key;
                 refreshList.run();
             });
-            categoryRow.addView(chip, equalButtonParams(Constants.CATEGORY_ORDER.length, i));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(42));
+            params.rightMargin = dp(8);
+            categoryRow.addView(chip, params);
         }
     }
 
     private void renderFetchPickerList(LinearLayout listBox, String category, Set<String> draft, Runnable refreshCounts) {
         listBox.removeAllViews();
         List<AccountRecord> accounts = fetchCandidateAccounts(category);
-        TextView summary = label(Constants.categoryLabel(category) + " · " + accounts.size()
+        TextView summary = label(store.categoryLabel(category) + " · " + accounts.size()
                 + " 个匹配 · 本类已选 " + countSelectedInAccounts(accounts, draft) + " 个", 12, Typeface.BOLD);
         summary.setTextColor(colorMuted());
         summary.setPadding(dp(2), 0, dp(2), dp(4));
@@ -1655,16 +1874,25 @@ public class MainActivity extends Activity {
             toast("请先导入邮箱账号");
             return;
         }
-        List<AccountRecord> accounts = new ArrayList<>(store.accounts);
+        List<AccountRecord> accounts = new ArrayList<>();
+        for (AccountRecord account : store.accounts) {
+            if (account.phone.isEmpty() || account.phone.equals(phone.phone)) {
+                accounts.add(account);
+            }
+        }
+        if (accounts.isEmpty()) {
+            toast("没有可绑定的邮箱；其他邮箱已绑定到别的手机号");
+            return;
+        }
         String[] labels = new String[accounts.size()];
         boolean[] checked = new boolean[accounts.size()];
         for (int i = 0; i < accounts.size(); i++) {
             labels[i] = accounts.get(i).email;
             checked[i] = phone.emails.contains(accounts.get(i).email);
         }
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("绑定邮箱（最多3个）")
-                .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> {
+                .setMultiChoiceItems(labels, checked, (opened, which, isChecked) -> {
                     checked[which] = isChecked;
                     int count = 0;
                     for (boolean item : checked) {
@@ -1674,12 +1902,12 @@ public class MainActivity extends Activity {
                     }
                     if (count > DataStore.MAX_EMAILS_PER_PHONE) {
                         checked[which] = false;
-                        ((AlertDialog) dialog).getListView().setItemChecked(which, false);
+                        ((AlertDialog) opened).getListView().setItemChecked(which, false);
                         toast("一个手机号最多绑定3个邮箱");
                     }
                 })
                 .setNegativeButton("取消", null)
-                .setPositiveButton("保存", (dialog, which) -> {
+                .setPositiveButton("保存", (opened, which) -> {
                     List<String> selected = new ArrayList<>();
                     for (int i = 0; i < checked.length; i++) {
                         if (checked[i]) {
@@ -1690,7 +1918,8 @@ public class MainActivity extends Activity {
                     showStatus("已更新绑定：" + phone.phone);
                     renderPhoneList();
                 })
-                .show();
+                .create();
+        showThemedDialog(dialog);
     }
 
     private void editTag(AccountRecord account) {
@@ -1826,7 +2055,7 @@ public class MainActivity extends Activity {
         String needle = accountQuery.trim().toLowerCase(Locale.ROOT);
         List<AccountRecord> result = new ArrayList<>();
         for (AccountRecord account : store.accounts) {
-            if (!Parsing.normalizeCategory(account.category).equals(currentCategory)) {
+            if (!account.category.equals(currentCategory)) {
                 continue;
             }
             String haystack = (account.email + " " + account.tag + " " + account.lastStatus + " " + account.phone).toLowerCase(Locale.ROOT);
@@ -1843,14 +2072,17 @@ public class MainActivity extends Activity {
 
     private List<AccountRecord> fetchCandidateAccounts(String category) {
         String needle = accountQuery.trim().toLowerCase(Locale.ROOT);
-        String normalizedCategory = category == null ? "" : Parsing.normalizeCategory(category);
+        String normalizedCategory = category == null ? "" : store.resolveCategory(category);
+        if (normalizedCategory == null) {
+            normalizedCategory = "";
+        }
         List<AccountRecord> result = new ArrayList<>();
         for (AccountRecord account : store.accounts) {
-            if (!normalizedCategory.isEmpty() && !Parsing.normalizeCategory(account.category).equals(normalizedCategory)) {
+            if (!normalizedCategory.isEmpty() && !account.category.equals(normalizedCategory)) {
                 continue;
             }
             String haystack = (account.email + " " + account.tag + " " + account.lastStatus + " "
-                    + account.phone + " " + account.categoryLabel()).toLowerCase(Locale.ROOT);
+                    + account.phone + " " + store.categoryLabel(account.category)).toLowerCase(Locale.ROOT);
             if (needle.isEmpty() || haystack.contains(needle)) {
                 result.add(account);
             }
@@ -1859,13 +2091,16 @@ public class MainActivity extends Activity {
     }
 
     private String defaultFetchPickerCategory() {
-        String normalized = Parsing.normalizeCategory(currentCategory);
+        String normalized = store.resolveCategory(currentCategory);
+        if (normalized == null) {
+            normalized = Constants.CATEGORY_UNUSED;
+        }
         if (!fetchCandidateAccounts(normalized).isEmpty()) {
             return normalized;
         }
-        for (String category : Constants.CATEGORY_ORDER) {
-            if (!fetchCandidateAccounts(category).isEmpty()) {
-                return category;
+        for (AccountCategory category : store.categorySnapshot()) {
+            if (!fetchCandidateAccounts(category.key).isEmpty()) {
+                return category.key;
             }
         }
         return normalized;
@@ -1887,7 +2122,7 @@ public class MainActivity extends Activity {
 
     private String fetchPickerMeta(AccountRecord account) {
         List<String> parts = new ArrayList<>();
-        parts.add(account.categoryLabel());
+        parts.add(store.categoryLabel(account.category));
         parts.add(account.source());
         if (!account.phone.isEmpty()) {
             parts.add(account.phone);
@@ -1970,28 +2205,30 @@ public class MainActivity extends Activity {
 
     private void chooseTopCount() {
         String[] values = {"1", "5", "10", "20", "30", "50"};
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("每次取件数量")
-                .setItems(values, (dialog, which) -> {
+                .setItems(values, (opened, which) -> {
                     store.config.top = Integer.parseInt(values[which]);
                     store.saveConfig();
                     showStatus("每次取件：" + store.config.top + " 封");
                     showPage("fetch");
                 })
-                .show();
+                .create();
+        showThemedDialog(dialog);
     }
 
     private void chooseProtocol() {
         String[] values = {"Graph 优先", "IMAP 优先"};
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("协议优先级")
-                .setItems(values, (dialog, which) -> {
+                .setItems(values, (opened, which) -> {
                     store.config.protocol = which == 1 ? "IMAP" : "Graph";
                     store.saveConfig();
                     showStatus("协议：" + values[which]);
                     showPage("fetch");
                 })
-                .show();
+                .create();
+        showThemedDialog(dialog);
     }
 
     private List<PhoneRecord> filteredPhones(boolean standalone) {
@@ -2011,7 +2248,7 @@ public class MainActivity extends Activity {
     private int countCategory(String category) {
         int count = 0;
         for (AccountRecord account : store.accounts) {
-            if (Parsing.normalizeCategory(account.category).equals(category)) {
+            if (account.category.equals(category)) {
                 count++;
             }
         }
@@ -2092,12 +2329,13 @@ public class MainActivity extends Activity {
     }
 
     private void confirm(String title, String message, Runnable action) {
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(title)
                 .setMessage(message)
                 .setNegativeButton("取消", null)
-                .setPositiveButton("确定", (dialog, which) -> action.run())
-                .show();
+                .setPositiveButton("确定", (opened, which) -> action.run())
+                .create();
+        showThemedDialog(dialog);
     }
 
     private void showThemedDialog(AlertDialog dialog) {
@@ -2161,7 +2399,7 @@ public class MainActivity extends Activity {
         TextView view = new TextView(this);
         view.setText(text);
         view.setTextSize(sp);
-        view.setTypeface(Typeface.DEFAULT, style);
+        view.setTypeface(Typeface.create(style == Typeface.BOLD ? "sans-serif-medium" : "sans-serif", style));
         view.setTextColor(colorText());
         view.setLineSpacing(0, 1.08f);
         return view;
@@ -2211,15 +2449,6 @@ public class MainActivity extends Activity {
         return box;
     }
 
-    private RadioButton radio(String text) {
-        RadioButton radio = new RadioButton(this);
-        radio.setText(text);
-        radio.setTextColor(colorText());
-        radio.setTextSize(14);
-        radio.setButtonTintList(android.content.res.ColorStateList.valueOf(colorBlue()));
-        return radio;
-    }
-
     private Button button(String text, String role) {
         Button button = new Button(this);
         styleButton(button, text, role);
@@ -2246,6 +2475,7 @@ public class MainActivity extends Activity {
         button.setMinimumWidth(0);
         button.setHeight("primary-large".equals(role) ? dp(54) : dp(44));
         button.setPadding(dp(6), 0, dp(6), 0);
+        button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         int fill;
         int stroke = colorBorder();
         int textColor;
@@ -2253,6 +2483,7 @@ public class MainActivity extends Activity {
         int pressedStroke = 0;
         if ("primary".equals(role) || "primary-large".equals(role)) {
             fill = colorBlue();
+            stroke = colorBlue();
             pressedFill = pressColor(fill);
             textColor = Color.WHITE;
         } else if ("hero".equals(role)) {
@@ -2268,15 +2499,27 @@ public class MainActivity extends Activity {
             pressedStroke = Color.argb(120, 255, 255, 255);
             textColor = Color.WHITE;
         } else if ("nav-active".equals(role)) {
-            fill = colorBlue();
-            stroke = colorBlue();
-            pressedFill = pressColor(fill);
-            pressedStroke = pressedFill;
-            textColor = Color.WHITE;
+            fill = withAlpha(colorBlue(), store.config.darkTheme ? 50 : 24);
+            stroke = Color.TRANSPARENT;
+            pressedFill = withAlpha(colorBlue(), store.config.darkTheme ? 70 : 38);
+            pressedStroke = Color.TRANSPARENT;
+            textColor = colorBlue();
         } else if ("nav".equals(role)) {
             fill = Color.TRANSPARENT;
             stroke = Color.TRANSPARENT;
             pressedFill = withAlpha(colorBlue(), store.config.darkTheme ? 38 : 22);
+            pressedStroke = Color.TRANSPARENT;
+            textColor = colorMuted();
+        } else if ("segment-active".equals(role)) {
+            fill = colorBlue();
+            stroke = colorBlue();
+            pressedFill = pressColor(fill);
+            pressedStroke = colorBlue();
+            textColor = Color.WHITE;
+        } else if ("segment".equals(role)) {
+            fill = store.config.darkTheme ? Color.rgb(30, 41, 59) : Color.rgb(241, 245, 249);
+            stroke = Color.TRANSPARENT;
+            pressedFill = withAlpha(colorBlue(), store.config.darkTheme ? 44 : 24);
             pressedStroke = Color.TRANSPARENT;
             textColor = colorMuted();
         } else if ("tagged".equals(role)) {
@@ -2286,7 +2529,8 @@ public class MainActivity extends Activity {
             pressedStroke = colorGreen();
             textColor = colorGreen();
         } else if ("danger".equals(role)) {
-            fill = store.config.darkTheme ? Color.rgb(74, 36, 40) : Color.rgb(255, 242, 242);
+            fill = store.config.darkTheme ? Color.rgb(68, 34, 42) : Color.rgb(255, 241, 242);
+            stroke = store.config.darkTheme ? Color.rgb(105, 48, 58) : Color.rgb(254, 205, 211);
             pressedFill = store.config.darkTheme ? Color.rgb(92, 45, 50) : Color.rgb(255, 226, 226);
             textColor = colorRed();
         } else if ("disabled".equals(role)) {
@@ -2294,9 +2538,10 @@ public class MainActivity extends Activity {
             pressedFill = fill;
             textColor = colorMuted();
         } else {
-            fill = colorSurface();
-            pressedFill = store.config.darkTheme ? Color.rgb(31, 44, 64) : Color.rgb(239, 246, 255);
-            textColor = colorText();
+            fill = store.config.darkTheme ? Color.rgb(28, 45, 68) : Color.rgb(239, 246, 255);
+            stroke = store.config.darkTheme ? Color.rgb(48, 73, 105) : Color.rgb(219, 234, 254);
+            pressedFill = store.config.darkTheme ? Color.rgb(36, 56, 82) : Color.rgb(219, 234, 254);
+            textColor = colorBlue();
         }
         pressedStroke = pressedStroke == 0 ? stroke : pressedStroke;
         button.setBackground(buttonBg(fill, stroke, pressedFill, pressedStroke));
@@ -2320,7 +2565,7 @@ public class MainActivity extends Activity {
 
     private GradientDrawable softCardBg() {
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(store.config.darkTheme ? Color.rgb(20, 32, 51) : Color.rgb(247, 251, 255));
+        bg.setColor(store.config.darkTheme ? Color.rgb(22, 33, 49) : Color.rgb(248, 250, 252));
         bg.setCornerRadius(dp(8));
         bg.setStroke(dp(1), colorBorder());
         return bg;
@@ -2352,11 +2597,9 @@ public class MainActivity extends Activity {
     }
 
     private GradientDrawable heroCardBg() {
-        GradientDrawable bg = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{colorBlue(), store.config.darkTheme ? Color.rgb(32, 199, 183) : Color.rgb(20, 184, 166)}
-        );
-        bg.setCornerRadius(dp(10));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(colorBlue());
+        bg.setCornerRadius(dp(8));
         return bg;
     }
 
@@ -2429,27 +2672,27 @@ public class MainActivity extends Activity {
     }
 
     private int colorBg() {
-        return store.config.darkTheme ? Color.rgb(15, 23, 36) : Color.rgb(238, 244, 250);
+        return store.config.darkTheme ? Color.rgb(15, 23, 42) : Color.rgb(244, 246, 248);
     }
 
     private int colorSurface() {
-        return store.config.darkTheme ? Color.rgb(25, 35, 51) : Color.WHITE;
+        return store.config.darkTheme ? Color.rgb(24, 34, 52) : Color.WHITE;
     }
 
     private int colorText() {
-        return store.config.darkTheme ? Color.rgb(238, 245, 255) : Color.rgb(22, 48, 77);
+        return store.config.darkTheme ? Color.rgb(241, 245, 249) : Color.rgb(23, 32, 51);
     }
 
     private int colorMuted() {
-        return store.config.darkTheme ? Color.rgb(159, 177, 199) : Color.rgb(111, 132, 160);
+        return store.config.darkTheme ? Color.rgb(148, 163, 184) : Color.rgb(102, 112, 133);
     }
 
     private int colorBorder() {
-        return store.config.darkTheme ? Color.rgb(45, 64, 92) : Color.rgb(215, 228, 244);
+        return store.config.darkTheme ? Color.rgb(51, 65, 85) : Color.rgb(225, 230, 237);
     }
 
     private int colorBlue() {
-        return store.config.darkTheme ? Color.rgb(79, 140, 255) : Color.rgb(47, 111, 237);
+        return store.config.darkTheme ? Color.rgb(96, 165, 250) : Color.rgb(37, 99, 235);
     }
 
     private int colorGreen() {

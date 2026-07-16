@@ -6,8 +6,10 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +19,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
+
+import javax.net.ssl.SSLException;
 
 import javax.mail.Address;
 import javax.mail.BodyPart;
@@ -50,7 +54,7 @@ final class MailService {
     }
 
     MailRow fetchPhoneRow(PhoneRecord phone, boolean conciseMode) throws Exception {
-        HttpResult response = request("GET", phone.apiUrl, null, null);
+        HttpResult response = requestSms(phone.apiUrl);
         if (response.status >= 400) {
             throw new IllegalStateException("短信 API 请求失败 HTTP " + response.status + ": " + Parsing.compact(response.body, 300));
         }
@@ -84,6 +88,44 @@ final class MailService {
         row.apiStatus = optString(payload, "code");
         row.concise = conciseMode;
         return row;
+    }
+
+    private HttpResult requestSms(String apiUrl) throws Exception {
+        String clean = apiUrl == null ? "" : apiUrl.trim();
+        URL url;
+        try {
+            url = new URL(clean);
+        } catch (Exception exc) {
+            throw new IllegalStateException("短信 API 地址无效，请重新导入完整的 http/https 地址。", exc);
+        }
+        String protocol = url.getProtocol();
+        if (!("http".equalsIgnoreCase(protocol) || "https".equalsIgnoreCase(protocol)) || url.getHost().isEmpty()) {
+            throw new IllegalStateException("短信 API 地址无效，请重新导入完整的 http/https 地址。");
+        }
+        Exception last = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                return request("GET", clean, null, null);
+            } catch (SSLException exc) {
+                throw new IllegalStateException("短信 API 安全连接失败，请检查系统时间、证书或网络拦截设置。", exc);
+            } catch (SocketTimeoutException exc) {
+                last = exc;
+            } catch (IOException exc) {
+                last = exc;
+            }
+            if (attempt == 0) {
+                try {
+                    Thread.sleep(350);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("短信 API 请求已取消。", interrupted);
+                }
+            }
+        }
+        if (last instanceof SocketTimeoutException) {
+            throw new IllegalStateException("短信 API 请求超时，已自动重试，请检查网络或稍后再试。", last);
+        }
+        throw new IllegalStateException("无法连接短信 API（" + url.getHost() + "），已自动重试；请检查网络或 API 服务状态。", last);
     }
 
     private List<MailRow> fetchGraphRows(AccountRecord account, int top) throws Exception {
@@ -282,28 +324,33 @@ final class MailService {
 
     private HttpResult request(String method, String urlText, String body, String bearerToken) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(urlText).openConnection();
-        connection.setRequestMethod(method);
-        connection.setConnectTimeout(Constants.CONNECT_TIMEOUT_MS);
-        connection.setReadTimeout(Constants.READ_TIMEOUT_MS);
-        connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("User-Agent", "WREmailAndroid/" + Constants.APP_VERSION);
-        if (bearerToken != null && !bearerToken.isEmpty()) {
-            connection.setRequestProperty("Authorization", "Bearer " + bearerToken);
-            connection.setRequestProperty("Prefer", "outlook.body-content-type=\"text\"");
-        }
-        if (body != null) {
-            byte[] data = body.getBytes(StandardCharsets.UTF_8);
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=utf-8");
-            connection.setRequestProperty("Content-Length", String.valueOf(data.length));
-            try (OutputStream output = connection.getOutputStream()) {
-                output.write(data);
+        try {
+            connection.setRequestMethod(method);
+            connection.setConnectTimeout(Constants.CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(Constants.READ_TIMEOUT_MS);
+            connection.setInstanceFollowRedirects(true);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("User-Agent", "WREmailAndroid/" + Constants.APP_VERSION);
+            if (bearerToken != null && !bearerToken.isEmpty()) {
+                connection.setRequestProperty("Authorization", "Bearer " + bearerToken);
+                connection.setRequestProperty("Prefer", "outlook.body-content-type=\"text\"");
             }
+            if (body != null) {
+                byte[] data = body.getBytes(StandardCharsets.UTF_8);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=utf-8");
+                connection.setRequestProperty("Content-Length", String.valueOf(data.length));
+                try (OutputStream output = connection.getOutputStream()) {
+                    output.write(data);
+                }
+            }
+            int status = connection.getResponseCode();
+            InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            String response = stream == null ? "" : readAll(stream);
+            return new HttpResult(status, response);
+        } finally {
+            connection.disconnect();
         }
-        int status = connection.getResponseCode();
-        InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-        String response = stream == null ? "" : readAll(stream);
-        return new HttpResult(status, response);
     }
 
     private Object parseJson(String text) {

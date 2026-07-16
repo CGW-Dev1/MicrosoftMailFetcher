@@ -1,5 +1,8 @@
 package com.cgwdev.wremail;
 
+import com.google.i18n.phonenumbers.PhoneNumberUtil;
+import com.google.i18n.phonenumbers.Phonenumber;
+
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -29,6 +32,23 @@ final class Parsing {
         return value != null && PHONE_RE.matcher(value.trim()).matches();
     }
 
+    static String phoneWithoutCountryCode(String value) {
+        String text = value == null ? "" : value.trim();
+        if (text.isEmpty()) {
+            return "";
+        }
+        try {
+            PhoneNumberUtil util = PhoneNumberUtil.getInstance();
+            Phonenumber.PhoneNumber parsed = util.parse(text, "ZZ");
+            String national = util.getNationalSignificantNumber(parsed);
+            if (!national.isEmpty()) {
+                return national;
+            }
+        } catch (Exception ignored) {
+        }
+        return text.replaceAll("\\D+", "");
+    }
+
     static String normalizeCategory(String value) {
         String text = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
         if (text.equals("plus") || text.equals("p") || text.equals("标记plus")) {
@@ -42,6 +62,21 @@ final class Parsing {
             return Constants.CATEGORY_BANNED;
         }
         return Constants.CATEGORY_UNUSED;
+    }
+
+    static boolean isUnusedCategoryAlias(String value) {
+        String text = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        return text.isEmpty() || text.equals("unused") || text.equals("none")
+                || text.equals("未使用") || text.equals("未标记");
+    }
+
+    static String importCategoryValue(String value) {
+        String raw = value == null ? "" : value.trim();
+        String normalized = normalizeCategory(raw);
+        if (!Constants.CATEGORY_UNUSED.equals(normalized) || isUnusedCategoryAlias(raw)) {
+            return normalized;
+        }
+        return compact(raw, 24);
     }
 
     static ImportResult<ImportRecord> parseAccounts(String text) {
@@ -79,7 +114,7 @@ final class Parsing {
                 record.phone = part(parts, 4);
                 record.phoneApiUrl = isHttpUrl(part(parts, 5)) ? part(parts, 5) : "";
             } else {
-                record.category = normalizeCategory(part(parts, 4));
+                record.category = importCategoryValue(part(parts, 4));
                 int cursor = 5;
                 String maybeTag = part(parts, cursor);
                 if (!maybeTag.isEmpty() && !isPhone(maybeTag) && !isHttpUrl(maybeTag)) {
