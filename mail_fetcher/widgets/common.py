@@ -43,6 +43,9 @@ class ElidedLabel(QtWidgets.QLabel):
         super().resizeEvent(event)
         self._update_text()
 
+    def minimumSizeHint(self) -> QtCore.QSize:
+        return QtCore.QSize(0, self.fontMetrics().height() + 2)
+
     def _update_text(self) -> None:
         metrics = self.fontMetrics()
         shown = metrics.elidedText(self._full_text, QtCore.Qt.TextElideMode.ElideRight, max(10, self.width() - 2))
@@ -161,6 +164,125 @@ class CountSelector(QtWidgets.QFrame):
             event.accept()
             return
         super().mousePressEvent(event)
+
+
+class CategorySelector(QtWidgets.QFrame):
+    currentKeyChanged = QtCore.pyqtSignal(str)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("CategorySelect")
+        self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.setAccessibleName("当前账号分类")
+        self.setFixedHeight(38)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self._items: list[tuple[str, str, int]] = []
+        self._current_key = ""
+        self._menu: QtWidgets.QMenu | None = None
+
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(12, 0, 10, 0)
+        layout.setSpacing(8)
+
+        caption = QtWidgets.QLabel("当前分类")
+        caption.setObjectName("CategoryCaption")
+        layout.addWidget(caption)
+
+        self.value_label = ElidedLabel("选择分类")
+        self.value_label.setObjectName("CategoryValue")
+        self.value_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        layout.addWidget(self.value_label, 1)
+
+        self.count_label = QtWidgets.QLabel("0")
+        self.count_label.setObjectName("CategoryCount")
+        self.count_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.count_label.setMinimumWidth(34)
+        layout.addWidget(self.count_label)
+
+        arrow = QtWidgets.QLabel("▾")
+        arrow.setObjectName("CategoryArrow")
+        arrow.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        arrow.setFixedWidth(14)
+        layout.addWidget(arrow)
+
+        for label in (caption, self.value_label, self.count_label, arrow):
+            label.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+    def currentKey(self) -> str:
+        return self._current_key
+
+    def setItems(self, items: list[tuple[str, str, int]], current_key: str) -> None:
+        self._items = list(items)
+        valid_keys = {key for key, _label, _count in self._items}
+        if current_key not in valid_keys:
+            current_key = self._items[0][0] if self._items else ""
+        self._current_key = current_key
+        self._rebuild_menu()
+        self._update_text()
+
+    def setCurrentKey(self, key: str, emit: bool = False) -> None:
+        if key not in {item_key for item_key, _label, _count in self._items}:
+            return
+        changed = key != self._current_key
+        self._current_key = key
+        self._update_text()
+        if changed and emit:
+            self.currentKeyChanged.emit(key)
+
+    def _rebuild_menu(self) -> None:
+        old_menu = self._menu
+        menu = QtWidgets.QMenu(self)
+        menu.setObjectName("CategoryMenu")
+        menu.setMinimumWidth(min(420, max(220, self.width())))
+        for key, label, count in self._items:
+            action = menu.addAction(f"{label}    {count}")
+            if key == self._current_key:
+                font = action.font()
+                font.setWeight(QtGui.QFont.Weight.DemiBold)
+                action.setFont(font)
+            action.triggered.connect(lambda checked=False, value=key: self._choose(value))
+        self._menu = menu
+        if old_menu is not None and old_menu is not menu:
+            old_menu.deleteLater()
+
+    def _choose(self, key: str) -> None:
+        if key == self._current_key:
+            return
+        self._current_key = key
+        self._rebuild_menu()
+        self._update_text()
+        self.currentKeyChanged.emit(key)
+
+    def _update_text(self) -> None:
+        current = next((item for item in self._items if item[0] == self._current_key), None)
+        if current is None:
+            self.value_label.setText("选择分类")
+            self.count_label.setText("0")
+            return
+        _key, label, count = current
+        self.value_label.setText(label)
+        self.count_label.setText(str(count))
+
+    def open_menu(self) -> None:
+        if self._menu is None or self._menu.isEmpty():
+            return
+        self._menu.setMinimumWidth(min(420, max(220, self.width())))
+        self._menu.exec(self.mapToGlobal(QtCore.QPoint(0, self.height() + 4)))
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self.open_menu()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter, QtCore.Qt.Key.Key_Space):
+            self.open_menu()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
 
 class BadgeLabel(QtWidgets.QLabel):

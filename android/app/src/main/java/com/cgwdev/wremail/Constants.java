@@ -5,7 +5,7 @@ import java.util.List;
 
 final class Constants {
     static final String DISPLAY_NAME = "邮件验证码助手";
-    static final String APP_VERSION = "V2.0";
+    static final String APP_VERSION = "V2.1";
 
     static final String AUTHORITY_BASE = "https://login.microsoftonline.com";
     static final String GRAPH_BASE = "https://graph.microsoft.com/v1.0";

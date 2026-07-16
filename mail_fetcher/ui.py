@@ -16,7 +16,7 @@ from .models import AccountRecord, ImportRecord, PhoneImportRecord
 from .parsing import clean_verification_code, compact_text
 from .services import MailService
 from .storage import AccountStore, ConfigStore, PhoneStore
-from .widgets import AccountCard, BadgeLabel, CheckBox, CountSelector, MailCard, SearchField, pill_button
+from .widgets import AccountCard, BadgeLabel, CategorySelector, CheckBox, CountSelector, MailCard, SearchField, pill_button
 
 SURFACE = "#ffffff"
 SURFACE_SOFT = "#f7f8fa"
@@ -178,7 +178,7 @@ def app_stylesheet(theme: str = "light") -> str:
         background: {surface};
     }}
     QFrame#AccountCard {{
-        min-height: 70px;
+        min-height: 72px;
         background: {surface_soft};
         border-radius: 9px;
     }}
@@ -327,7 +327,7 @@ def app_stylesheet(theme: str = "light") -> str:
         background: {blue_soft};
         color: {blue};
     }}
-    QLineEdit#SearchField, QPlainTextEdit#ImportEditor, QTextEdit#DetailViewer, QComboBox#CountCombo, QComboBox#MoveCombo, QComboBox#CategoryCombo {{
+    QLineEdit#SearchField, QPlainTextEdit#ImportEditor, QTextEdit#DetailViewer {{
         background: {surface};
         border: 1px solid {border};
         border-radius: 8px;
@@ -341,17 +341,8 @@ def app_stylesheet(theme: str = "light") -> str:
         background: {surface};
         color: {text};
     }}
-    QLineEdit#SearchField:focus, QPlainTextEdit#ImportEditor:focus, QTextEdit#DetailViewer:focus, QComboBox#CountCombo:focus, QComboBox#MoveCombo:focus, QComboBox#CategoryCombo:focus {{
+    QLineEdit#SearchField:focus, QPlainTextEdit#ImportEditor:focus, QTextEdit#DetailViewer:focus {{
         border: 1px solid {focus_border};
-    }}
-    QComboBox#CategoryCombo {{
-        background: {blue_soft};
-        border: 1px solid {focus_border};
-        color: {blue};
-        font-size: 14px;
-        font-weight: 600;
-        padding-left: 12px;
-        padding-right: 32px;
     }}
     QTableWidget {{
         background: {surface};
@@ -371,20 +362,16 @@ def app_stylesheet(theme: str = "light") -> str:
         padding: 8px 10px;
         font-weight: 600;
     }}
-    QComboBox#CountCombo {{
-        padding-right: 32px;
-        min-height: 24px;
-        font-weight: 600;
-    }}
-    QComboBox#MoveCombo {{
-        padding-right: 30px;
-        min-height: 20px;
-        font-weight: 500;
-        color: {text};
-    }}
     QLabel#BoundEmailText {{
+        background: transparent;
         color: {text};
         font-size: 13px;
+    }}
+    QWidget#BoundEmailCell {{
+        background: transparent;
+    }}
+    QWidget#BoundEmailCell[selected="true"] {{
+        background: {input_selection};
     }}
     QToolButton[role="email-menu"] {{
         background: transparent;
@@ -398,36 +385,6 @@ def app_stylesheet(theme: str = "light") -> str:
     QToolButton[role="email-menu"]:hover {{
         background: {blue_soft};
         border: 1px solid {border};
-    }}
-    QToolButton[role="account-menu"] {{
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: 7px;
-        color: {muted};
-        font-size: 20px;
-        font-weight: 600;
-        padding: 0 0 5px 0;
-    }}
-    QToolButton[role="account-menu"]:hover {{
-        background: {surface};
-        border: 1px solid {border};
-        color: {blue};
-    }}
-    QToolButton[role="account-menu"]::menu-indicator {{
-        image: none;
-        width: 0;
-        height: 0;
-    }}
-    QComboBox#CountCombo::drop-down, QComboBox#MoveCombo::drop-down, QComboBox#CategoryCombo::drop-down {{
-        subcontrol-origin: padding;
-        subcontrol-position: top right;
-        width: 24px;
-        border: none;
-        background: transparent;
-    }}
-    QComboBox#CountCombo::down-arrow, QComboBox#MoveCombo::down-arrow, QComboBox#CategoryCombo::down-arrow {{
-        width: 12px;
-        height: 12px;
     }}
     QPushButton {{
         background: {surface};
@@ -560,6 +517,85 @@ def app_stylesheet(theme: str = "light") -> str:
         border: 1px solid {border};
         color: {green};
     }}
+    QPushButton[role="account-action"] {{
+        background: {surface};
+        color: {blue};
+        border: 1px solid {border};
+        border-radius: 6px;
+        padding: 0;
+        font-size: 12px;
+        font-weight: 600;
+    }}
+    QPushButton[role="account-action"]:hover {{
+        background: {blue_soft};
+        color: {blue_dark};
+        border: 1px solid {focus_border};
+    }}
+    QPushButton[role="account-tagged"] {{
+        background: {green_soft};
+        color: {green};
+        border: 1px solid {green};
+        border-radius: 6px;
+        padding: 0;
+        font-size: 12px;
+        font-weight: 600;
+    }}
+    QPushButton[role="account-tagged"]:hover {{
+        background: {green_soft};
+        color: {green};
+        border: 1px solid {green};
+    }}
+    QFrame#CategorySelect {{
+        background: {blue_soft};
+        border: 1px solid {border};
+        border-radius: 8px;
+    }}
+    QFrame#CategorySelect:hover,
+    QFrame#CategorySelect:focus {{
+        background: {accent_hover};
+        border: 1px solid {focus_border};
+    }}
+    QLabel#CategoryCaption {{
+        color: {muted};
+        font-size: 12px;
+        font-weight: 500;
+    }}
+    QLabel#CategoryValue {{
+        color: {blue};
+        font-size: 13px;
+        font-weight: 600;
+    }}
+    QLabel#CategoryCount {{
+        background: {surface};
+        color: {blue};
+        border: 1px solid {border};
+        border-radius: 7px;
+        padding: 2px 7px;
+        font-size: 12px;
+        font-weight: 600;
+    }}
+    QLabel#CategoryArrow {{
+        color: {muted};
+        font-size: 13px;
+        font-weight: 600;
+    }}
+    QPushButton[role="move-picker"]::menu-indicator {{
+        image: none;
+        width: 0;
+    }}
+    QPushButton[role="move-picker"] {{
+        background: {surface_soft};
+        color: {text};
+        border: 1px solid {border};
+        border-radius: 8px;
+        padding: 6px 12px;
+        text-align: center;
+    }}
+    QPushButton[role="move-picker"]:hover {{
+        background: {blue_soft};
+        color: {blue};
+        border: 1px solid {focus_border};
+    }}
     QPushButton[compact="true"] {{
         padding: 3px 8px;
         border-radius: 7px;
@@ -647,6 +683,10 @@ def app_stylesheet(theme: str = "light") -> str:
     }}
     QMenu::item:disabled {{
         color: {disabled_text};
+    }}
+    QMenu#CategoryMenu::item {{
+        min-height: 24px;
+        padding: 7px 30px 7px 12px;
     }}
     QMenu::separator {{
         background: {border};
@@ -752,6 +792,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.account_states: dict[str, bool] = {account.email: True for account in self.account_store.accounts}
         self.mail_rows: list[dict] = []
         self.logs: list[str] = []
+        self.current_category_key = ACCOUNT_CATEGORY_UNUSED
 
         self.build_ui(icon_path)
         self.render_results(reset_scroll=True)
@@ -875,22 +916,25 @@ class MainWindow(QtWidgets.QMainWindow):
         title.setObjectName("SectionTitle")
         layout.addWidget(title)
 
-        row = QtWidgets.QHBoxLayout()
-        row.setSpacing(8)
+        tools_grid = QtWidgets.QGridLayout()
+        tools_grid.setHorizontalSpacing(8)
+        tools_grid.setVerticalSpacing(8)
         tools = (
             ("导入邮箱", "primary", self.open_import_dialog),
             ("导出邮箱", "secondary", self.export_accounts),
             ("手机号管理", "secondary", self.open_phone_dialog),
             ("手机号取码", "secondary", self.open_standalone_phone_code_dialog),
         )
-        for text, role, handler in tools:
+        for index, (text, role, handler) in enumerate(tools):
             button = pill_button(text, role=role)
             button.setFixedHeight(34)
-            button.setMinimumWidth(0)
+            button.setMinimumWidth(max(96, button.fontMetrics().horizontalAdvance(text) + 24))
             button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
             button.clicked.connect(handler)
-            row.addWidget(button, 1)
-        layout.addLayout(row)
+            tools_grid.addWidget(button, index // 2, index % 2)
+        tools_grid.setColumnStretch(0, 1)
+        tools_grid.setColumnStretch(1, 1)
+        layout.addLayout(tools_grid)
         return frame
 
     def make_sidebar(self) -> QtWidgets.QFrame:
@@ -912,19 +956,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.account_count_label = QtWidgets.QLabel("0/0")
         self.account_count_label.setObjectName("SidebarCount")
         top.addWidget(self.account_count_label)
+        manage_button = pill_button("管理分类", role="secondary")
+        manage_button.setFixedHeight(32)
+        manage_button.clicked.connect(self.open_category_manager)
+        top.addWidget(manage_button)
         layout.addLayout(top)
 
         category_line = QtWidgets.QHBoxLayout()
         category_line.setSpacing(6)
-        self.category_combo = QtWidgets.QComboBox()
-        self.category_combo.setObjectName("CategoryCombo")
-        self.category_combo.setFixedHeight(38)
-        self.category_combo.currentIndexChanged.connect(self.on_category_changed)
-        category_line.addWidget(self.category_combo, 1)
-        manage_button = pill_button("管理分类", role="secondary")
-        manage_button.setFixedHeight(38)
-        manage_button.clicked.connect(self.open_category_manager)
-        category_line.addWidget(manage_button)
+        self.category_selector = CategorySelector()
+        self.category_selector.currentKeyChanged.connect(self.on_category_changed)
+        category_line.addWidget(self.category_selector, 1)
         layout.addLayout(category_line)
 
         self.account_search = SearchField("搜索当前分类中的邮箱")
@@ -940,30 +982,28 @@ class MainWindow(QtWidgets.QMainWindow):
         self.select_all_box.toggled.connect(self.toggle_all_accounts)
         list_action_line.addWidget(self.select_all_box)
 
-        list_action_line.addStretch(1)
+        self.move_button = pill_button("移动到分类  ▾", role="move-picker")
+        self.move_button.setFixedHeight(34)
+        self.move_button.setMinimumWidth(104)
+        self.move_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        list_action_line.addWidget(self.move_button, 2)
 
         clear_button = pill_button("清空", role="ghost")
         clear_button.setFixedHeight(34)
+        clear_button.setMinimumWidth(52)
+        clear_button.setMaximumWidth(110)
+        clear_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         clear_button.clicked.connect(self.clear_accounts)
-        list_action_line.addWidget(clear_button)
+        list_action_line.addWidget(clear_button, 1)
 
         delete_button = pill_button("删除", role="danger")
         delete_button.clicked.connect(self.remove_selected)
         delete_button.setFixedHeight(34)
-        list_action_line.addWidget(delete_button)
+        delete_button.setMinimumWidth(52)
+        delete_button.setMaximumWidth(110)
+        delete_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        list_action_line.addWidget(delete_button, 1)
         layout.addLayout(list_action_line)
-
-        move_line = QtWidgets.QHBoxLayout()
-        move_line.setSpacing(6)
-        self.move_combo = QtWidgets.QComboBox()
-        self.move_combo.setObjectName("MoveCombo")
-        self.move_combo.setFixedHeight(34)
-        move_line.addWidget(self.move_combo, 1)
-        move_button = pill_button("应用", role="secondary")
-        move_button.setFixedHeight(34)
-        move_button.clicked.connect(self.move_selected_from_combo)
-        move_line.addWidget(move_button)
-        layout.addLayout(move_line)
         self.refresh_category_controls(ACCOUNT_CATEGORY_UNUSED)
 
         self.account_scroll = QtWidgets.QScrollArea()
@@ -1171,50 +1211,50 @@ class MainWindow(QtWidgets.QMainWindow):
             button.setToolTip(f"当前使用{name}令牌" if active else f"切换到{name}令牌")
 
     def current_group(self) -> str:
-        if not hasattr(self, "category_combo"):
-            return ACCOUNT_CATEGORY_UNUSED
-        key = self.category_combo.currentData()
+        key = self.category_selector.currentKey() if hasattr(self, "category_selector") else self.current_category_key
         return str(key) if key and self.category_store.contains(str(key)) else ACCOUNT_CATEGORY_UNUSED
 
     def set_account_group(self, group: str) -> None:
         group = self.category_store.resolve(group) or ACCOUNT_CATEGORY_UNUSED
-        index = self.category_combo.findData(group)
-        if index < 0:
+        if not self.category_store.contains(group):
             group = ACCOUNT_CATEGORY_UNUSED
-            index = self.category_combo.findData(group)
-        self.category_combo.blockSignals(True)
-        self.category_combo.setCurrentIndex(max(0, index))
-        self.category_combo.blockSignals(False)
+        self.current_category_key = group
+        self.category_selector.setCurrentKey(group)
         self.refresh_accounts(reset_scroll=True)
 
-    def on_category_changed(self, _index: int) -> None:
+    def on_category_changed(self, category: str) -> None:
+        self.current_category_key = category
         if hasattr(self, "account_scroll"):
             self.refresh_accounts(reset_scroll=True)
 
     def refresh_category_controls(self, selected: str | None = None) -> None:
-        if not hasattr(self, "category_combo"):
+        if not hasattr(self, "category_selector"):
             return
         selected_key = self.category_store.resolve(selected or self.current_group()) or ACCOUNT_CATEGORY_UNUSED
         counts = {
             category.key: sum(1 for account in self.account_store.accounts if account.category == category.key)
             for category in self.category_store.categories
         }
-        self.category_combo.blockSignals(True)
-        self.category_combo.clear()
-        for category in self.category_store.categories:
-            self.category_combo.addItem(f"{category.label}  ·  {counts.get(category.key, 0)}", category.key)
-        selected_index = self.category_combo.findData(selected_key)
-        self.category_combo.setCurrentIndex(max(0, selected_index))
-        self.category_combo.blockSignals(False)
+        category_items = [
+            (category.key, category.label, counts.get(category.key, 0))
+            for category in self.category_store.categories
+        ]
+        self.category_selector.setItems(category_items, selected_key)
+        self.current_category_key = self.category_selector.currentKey() or ACCOUNT_CATEGORY_UNUSED
 
-        if hasattr(self, "move_combo"):
-            self.move_combo.blockSignals(True)
-            self.move_combo.clear()
-            self.move_combo.addItem("移动选中账号到…", None)
+        if hasattr(self, "move_button"):
+            old_menu = self.move_button.menu()
+            menu = QtWidgets.QMenu(self.move_button)
+            menu.setObjectName("CategoryMenu")
+            menu.setMinimumWidth(max(200, self.move_button.width()))
             for category in self.category_store.categories:
-                self.move_combo.addItem(category.label, category.key)
-            self.move_combo.setCurrentIndex(0)
-            self.move_combo.blockSignals(False)
+                action = menu.addAction(category.label)
+                action.triggered.connect(
+                    lambda checked=False, value=category.key: self.set_selected_category(value)
+                )
+            self.move_button.setMenu(menu)
+            if old_menu is not None and old_menu is not menu:
+                old_menu.deleteLater()
 
     def open_category_manager(self) -> None:
         from .category_dialog import CategoryManagerDialog
@@ -1527,14 +1567,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.refresh_accounts(reset_scroll=True)
         target = self.category_store.label(category)
         self.update_status(f"已将 {changed} 个邮箱移动到 {target}")
-
-    def move_selected_from_combo(self) -> None:
-        category = self.move_combo.currentData()
-        if not category:
-            self.update_status("请先选择目标分类")
-            return
-        self.set_selected_category(str(category))
-        self.move_combo.setCurrentIndex(0)
 
     def clear_accounts(self) -> None:
         if not self.account_store.accounts:

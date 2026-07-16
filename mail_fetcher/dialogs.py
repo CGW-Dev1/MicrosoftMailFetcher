@@ -196,8 +196,9 @@ class StandalonePhoneCodeDialog(QtWidgets.QDialog):
         self.editor.setMaximumHeight(96)
         layout.addWidget(self.editor)
 
-        actions = QtWidgets.QHBoxLayout()
-        actions.setSpacing(10)
+        actions = QtWidgets.QGridLayout()
+        actions.setHorizontalSpacing(10)
+        actions.setVerticalSpacing(8)
         self.load_button = pill_button("从文件载入", role="secondary")
         self.load_button.clicked.connect(self.load_file)
         self.import_button = pill_button("导入手机号", role="primary")
@@ -214,19 +215,22 @@ class StandalonePhoneCodeDialog(QtWidgets.QDialog):
         self.copy_sms_button.clicked.connect(self.copy_selected_sms)
         self.clear_button = pill_button("清空列表", role="danger")
         self.clear_button.clicked.connect(self.clear_records)
-        for button in (
-            self.load_button,
-            self.import_button,
-            self.fetch_selected_button,
-            self.fetch_all_button,
-            self.copy_code_button,
-            self.copy_phone_button,
-            self.copy_sms_button,
-            self.clear_button,
-        ):
+        action_buttons = (
+            (self.load_button, 0, 0),
+            (self.import_button, 0, 1),
+            (self.fetch_selected_button, 0, 2),
+            (self.fetch_all_button, 0, 3),
+            (self.copy_code_button, 1, 0),
+            (self.copy_phone_button, 1, 1),
+            (self.copy_sms_button, 1, 2),
+            (self.clear_button, 1, 3),
+        )
+        for button, row, column in action_buttons:
             button.setFixedHeight(38)
-            actions.addWidget(button)
-        actions.addStretch(1)
+            button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+            actions.addWidget(button, row, column)
+        for column in range(4):
+            actions.setColumnStretch(column, 1)
         layout.addLayout(actions)
 
         self.search = QtWidgets.QLineEdit()
@@ -433,12 +437,30 @@ class StandalonePhoneCodeDialog(QtWidgets.QDialog):
         record = self.records.get(phone_number)
         if not record:
             return
-        record.last_status = f"失败：{error[:80]}"
-        record.last_message = error[:500]
-        self.store.mark_fetch_result(phone_number, record.last_status, message=error)
+        message = self.friendly_error_message(error)
+        record.last_status = "取码失败"
+        record.last_message = message
+        self.store.mark_fetch_result(phone_number, record.last_status, message=message)
         self.records = self.store.as_dict()
-        self.results[phone_number] = {"code": "", "sms_content": error, "preview": error}
+        self.results[phone_number] = {"code": "", "sms_content": message, "preview": message}
         self.refresh_table()
+
+    @staticmethod
+    def friendly_error_message(error: str) -> str:
+        text = " ".join((error or "").split()).strip()
+        technical_markers = (
+            "HTTPSConnectionPool",
+            "HTTPConnectionPool",
+            "Max retries exceeded",
+            "NewConnectionError",
+            "ProxyError",
+            "ConnectTimeout",
+        )
+        if not text:
+            return "取码失败，请检查网络和 API 地址后重试。"
+        if any(marker in text for marker in technical_markers):
+            return "无法连接短信 API，请检查网络、代理或 API 服务状态后重试。"
+        return compact_text(text, 180)
 
     def on_progress(self, done: int, total: int) -> None:
         self.progress_bar.setRange(0, max(total, 1))
@@ -576,8 +598,8 @@ class PhoneDialog(QtWidgets.QDialog):
         self.table.horizontalHeader().setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         self.table.verticalHeader().setDefaultSectionSize(42)
         self.table.setAlternatingRowColors(True)
-        self.table.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self.show_table_context_menu)
+        self.table.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.NoContextMenu)
+        self.table.itemSelectionChanged.connect(self.sync_bound_email_selection)
         layout.addWidget(self.table, 3)
 
         self.editor = QtWidgets.QPlainTextEdit()
@@ -598,27 +620,28 @@ class PhoneDialog(QtWidgets.QDialog):
         self.code_label.setMinimumHeight(42)
         layout.addWidget(self.code_label)
 
-        actions = QtWidgets.QHBoxLayout()
+        actions = QtWidgets.QGridLayout()
         actions.setSpacing(10)
         action_items = (
-            ("从文件载入", self.load_file, "secondary"),
-            ("导入手机号", self.import_phones, "primary"),
-            ("获取验证码", self.fetch_selected_code, "primary"),
-            ("导出手机号", self.export_phones, "secondary"),
-            ("清空当前绑定", self.clear_selected_phone_bindings, "secondary"),
-            ("删除手机号", self.delete_selected_phone, "danger"),
+            ("从文件载入", self.load_file, "secondary", 0, 0, 1, 1),
+            ("导入手机号", self.import_phones, "primary", 0, 1, 1, 1),
+            ("获取验证码", self.fetch_selected_code, "primary", 0, 2, 1, 1),
+            ("复制手机号", self.copy_selected_phone, "secondary", 0, 3, 1, 1),
+            ("导出手机号", self.export_phones, "secondary", 1, 0, 1, 1),
+            ("清空当前绑定", self.clear_selected_phone_bindings, "secondary", 1, 1, 1, 1),
+            ("删除手机号", self.delete_selected_phone, "danger", 1, 2, 1, 1),
         )
-        for text, slot, role in action_items:
+        for text, slot, role, row, column, row_span, column_span in action_items:
             button = pill_button(text, role=role)
             button.setFixedHeight(40)
-            width = max(112, button.fontMetrics().horizontalAdvance(text) + 34)
-            button.setMinimumWidth(width)
             button.setSizePolicy(
                 QtWidgets.QSizePolicy.Policy.Expanding,
                 QtWidgets.QSizePolicy.Policy.Fixed,
             )
             button.clicked.connect(slot)
-            actions.addWidget(button, 1)
+            actions.addWidget(button, row, column, row_span, column_span)
+        for column in range(4):
+            actions.setColumnStretch(column, 1)
         layout.addLayout(actions)
 
         self.refresh_table()
@@ -667,10 +690,13 @@ class PhoneDialog(QtWidgets.QDialog):
             self.table.setCellWidget(row, 2, self.build_bound_email_cell(phone))
         if phones:
             self.table.selectRow(0)
+        self.sync_bound_email_selection()
 
     def build_bound_email_cell(self, phone: PhoneRecord) -> QtWidgets.QWidget:
         cell = QtWidgets.QWidget()
         cell.setObjectName("BoundEmailCell")
+        cell.setProperty("selected", "false")
+        cell.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QtWidgets.QHBoxLayout(cell)
         layout.setContentsMargins(8, 0, 4, 0)
         layout.setSpacing(6)
@@ -693,22 +719,16 @@ class PhoneDialog(QtWidgets.QDialog):
             lambda _checked=False, phone_number=phone.phone, button=menu_button: self.show_email_action_menu(
                 phone_number,
                 button.mapToGlobal(QtCore.QPoint(0, button.height())),
-                include_copy=False,
             )
         )
         layout.addWidget(menu_button)
         return cell
 
-    def show_email_action_menu(self, phone_number: str, global_pos: QtCore.QPoint, include_copy: bool = False) -> None:
+    def show_email_action_menu(self, phone_number: str, global_pos: QtCore.QPoint) -> None:
         phone = self.phone_store.get(phone_number)
         if not phone:
             return
         menu = QtWidgets.QMenu(self)
-        copy_action = None
-        if include_copy:
-            copy_action = menu.addAction("复制手机号")
-            menu.addSeparator()
-
         action_payloads: dict[QtGui.QAction, tuple[str, str]] = {}
         phone_email_keys = {email.lower() for email in phone.emails}
         other_bound_email_keys = {
@@ -745,9 +765,6 @@ class PhoneDialog(QtWidgets.QDialog):
                 action_payloads[action] = ("unbind", email)
 
         action = menu.exec(global_pos)
-        if copy_action is not None and action == copy_action:
-            self.copy_phone_number(phone_number)
-            return
         payload = action_payloads.get(action)
         if not payload:
             return
@@ -775,20 +792,24 @@ class PhoneDialog(QtWidgets.QDialog):
         item = self.table.item(row, 0)
         return item.data(QtCore.Qt.ItemDataRole.UserRole) if item else ""
 
-    def show_table_context_menu(self, pos: QtCore.QPoint) -> None:
-        item = self.table.itemAt(pos)
-        if not item:
-            return
-        self.table.selectRow(item.row())
-        phone_item = self.table.item(item.row(), 0)
-        phone_number = phone_item.data(QtCore.Qt.ItemDataRole.UserRole) if phone_item else ""
-        if not phone_number:
-            return
-        menu = QtWidgets.QMenu(self)
-        copy_action = menu.addAction("复制手机号")
-        action = menu.exec(self.table.viewport().mapToGlobal(pos))
-        if action == copy_action:
-            self.copy_phone_number(str(phone_number))
+    def sync_bound_email_selection(self) -> None:
+        selection_model = self.table.selectionModel()
+        selected_rows = (
+            {index.row() for index in selection_model.selectedRows()}
+            if selection_model is not None
+            else set()
+        )
+        for row in range(self.table.rowCount()):
+            cell = self.table.cellWidget(row, 2)
+            if cell is None:
+                continue
+            selected = "true" if row in selected_rows else "false"
+            if cell.property("selected") == selected:
+                continue
+            cell.setProperty("selected", selected)
+            cell.style().unpolish(cell)
+            cell.style().polish(cell)
+            cell.update()
 
     def copy_phone_number(self, phone_number: str) -> None:
         QtWidgets.QApplication.clipboard().setText(phone_number)
@@ -903,8 +924,9 @@ class PhoneDialog(QtWidgets.QDialog):
         self.sms_result_ready.emit(data)
 
     def on_code_error(self, phone_number: str, error: str) -> None:
-        self.phone_store.mark_fetch_result(phone_number, "获取失败", message=error)
-        self.code_label.setText(f"获取失败：{error[:180]}")
+        message = StandalonePhoneCodeDialog.friendly_error_message(error)
+        self.phone_store.mark_fetch_result(phone_number, "获取失败", message=message)
+        self.code_label.setText(f"获取失败：{message}")
         self.refresh_table()
         self.changed.emit()
 

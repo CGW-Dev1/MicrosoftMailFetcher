@@ -3,7 +3,7 @@ from __future__ import annotations
 import imaplib
 import re
 import threading
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from .constants import (
     AUTHORITY_BASE,
@@ -20,6 +20,7 @@ from .security import EncryptedTextFile, app_data_dir
 from .storage import AccountStore, ConfigStore
 
 _http_local = threading.local()
+_sms_http_local = threading.local()
 
 
 def http_session() -> "requests.Session":
@@ -34,6 +35,33 @@ def http_session() -> "requests.Session":
         session.mount("https://", adapter)
         session.mount("http://", adapter)
         _http_local.session = session
+    return session
+
+
+def sms_http_session(direct: bool = False) -> "requests.Session":
+    """Return a retry-enabled session dedicated to the read-only SMS API."""
+    import requests
+    from urllib3.util.retry import Retry
+
+    cache_key = "direct_session" if direct else "session"
+    session = getattr(_sms_http_local, cache_key, None)
+    if session is None:
+        retry = Retry(
+            total=2,
+            connect=2,
+            read=1,
+            status=2,
+            backoff_factor=0.35,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset({"GET"}),
+            raise_on_status=False,
+        )
+        session = requests.Session()
+        session.trust_env = not direct
+        adapter = requests.adapters.HTTPAdapter(pool_connections=8, pool_maxsize=8, max_retries=retry)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        setattr(_sms_http_local, cache_key, session)
     return session
 
 
@@ -229,10 +257,10 @@ class ImapMailClient:
 
 class SmsService:
     def fetch_phone_row(self, phone: PhoneRecord, concise_mode: bool = True) -> dict:
-        response = http_session().get(phone.api_url, timeout=HTTP_TIMEOUT)
+        response = self._request(phone.api_url)
         text = response.text or ""
         if response.status_code >= 400:
-            raise RuntimeError(f"短信 API 请求失败 HTTP {response.status_code}: {text[:300]}")
+            raise RuntimeError(f"短信 API 返回 HTTP {response.status_code}，请稍后重试或检查 API 是否到期。")
         payload = self._json_payload(response)
         fields = self._api_data_fields(payload)
         sms_content = fields["sms_content"]
@@ -261,6 +289,37 @@ class SmsService:
             "api_msg": fields["api_msg"],
             "api_status": fields["api_status"],
         }
+
+    def _request(self, api_url: str) -> "requests.Response":
+        import requests
+
+        url = (api_url or "").strip()
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise RuntimeError("短信 API 地址无效，请重新导入完整的 http/https 地址。")
+
+        try:
+            return sms_http_session(direct=False).get(url, timeout=(6, 18))
+        except requests.exceptions.SSLError as exc:
+            raise RuntimeError("短信 API 安全连接失败，请检查系统时间、证书或网络拦截设置。") from exc
+        except requests.exceptions.Timeout as exc:
+            raise RuntimeError("短信 API 请求超时，已自动重试，请检查网络或稍后再试。") from exc
+        except (requests.exceptions.ProxyError, requests.exceptions.ConnectionError) as _first_error:
+            # A stale environment proxy is a common cause on Windows.  Retry
+            # without environment proxy variables while keeping TLS checks on.
+            try:
+                return sms_http_session(direct=True).get(url, timeout=(6, 18))
+            except requests.exceptions.SSLError as exc:
+                raise RuntimeError("短信 API 安全连接失败，请检查系统时间、证书或网络拦截设置。") from exc
+            except requests.exceptions.Timeout as exc:
+                raise RuntimeError("短信 API 请求超时，已自动重试并尝试直连，请稍后再试。") from exc
+            except requests.exceptions.RequestException as exc:
+                host = parsed.hostname or "短信 API"
+                raise RuntimeError(
+                    f"无法连接短信 API（{host}），已自动重试并尝试直连；请检查网络、代理或 API 服务状态。"
+                ) from exc
+        except requests.exceptions.RequestException as exc:
+            raise RuntimeError("短信 API 请求失败，请检查 API 地址和网络设置。") from exc
 
     def _json_payload(self, response: requests.Response) -> object | None:
         try:

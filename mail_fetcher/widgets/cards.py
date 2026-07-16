@@ -30,8 +30,8 @@ class AccountCard(ClickableFrame):
         self.setProperty("selected", "true" if checked else "false")
         self.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(70)
-        self.setMaximumHeight(70)
+        self.setMinimumHeight(72)
+        self.setMaximumHeight(72)
         self.clicked.connect(self.toggle_selection)
 
         layout = QtWidgets.QHBoxLayout(self)
@@ -64,27 +64,37 @@ class AccountCard(ClickableFrame):
 
         layout.addWidget(text_host, 1)
 
-        self.action_button = QtWidgets.QToolButton()
-        self.action_button.setText("⋯")
-        self.action_button.setProperty("role", "account-menu")
-        self.action_button.setCursor(QtGui.QCursor(QtCore.Qt.CursorShape.PointingHandCursor))
-        self.action_button.setPopupMode(QtWidgets.QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.action_button.setFixedSize(34, 34)
-        self.action_button.setToolTip("账号操作")
+        actions_host = QtWidgets.QWidget()
+        actions_host.setFixedSize(104, 54)
+        actions = QtWidgets.QGridLayout(actions_host)
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setHorizontalSpacing(4)
+        actions.setVerticalSpacing(4)
 
-        menu = QtWidgets.QMenu(self.action_button)
-        fetch_mail_action = menu.addAction("邮箱取码")
-        fetch_mail_action.triggered.connect(lambda: self.mail_code_requested.emit(self.account.email))
-        fetch_phone_action = menu.addAction("手机取码")
-        fetch_phone_action.setEnabled(bool(account.phone))
-        fetch_phone_action.triggered.connect(lambda: self.phone_code_requested.emit(self.account.email))
-        menu.addSeparator()
-        copy_action = menu.addAction("复制邮箱")
-        copy_action.triggered.connect(lambda: self.copy_requested.emit(self.account.email))
-        tag_action = menu.addAction("编辑标签")
-        tag_action.triggered.connect(lambda: self.tag_requested.emit(self.account.email))
-        self.action_button.setMenu(menu)
-        layout.addWidget(self.action_button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        mail_button = self._action_button("邮箱", "获取这个邮箱的验证码邮件")
+        mail_button.clicked.connect(lambda: self.mail_code_requested.emit(self.account.email))
+        phone_button = self._action_button("手机", "获取这个邮箱绑定手机号的验证码")
+        phone_button.setEnabled(bool(account.phone))
+        phone_button.clicked.connect(lambda: self.phone_code_requested.emit(self.account.email))
+        tag_text = compact_text(account.tag, 4) if account.tag else "标签"
+        tag_role = "account-tagged" if account.tag else "account-action"
+        tag_button = self._action_button(tag_text, "编辑账号标签", role=tag_role)
+        tag_button.clicked.connect(lambda: self.tag_requested.emit(self.account.email))
+        copy_button = self._action_button("复制", "复制邮箱地址")
+        copy_button.clicked.connect(lambda: self.copy_requested.emit(self.account.email))
+
+        actions.addWidget(mail_button, 0, 0)
+        actions.addWidget(phone_button, 0, 1)
+        actions.addWidget(tag_button, 1, 0)
+        actions.addWidget(copy_button, 1, 1)
+        layout.addWidget(actions_host, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+
+    @staticmethod
+    def _action_button(text: str, tooltip: str, role: str = "account-action") -> QtWidgets.QPushButton:
+        button = pill_button(text, role=role)
+        button.setFixedSize(50, 25)
+        button.setToolTip(tooltip)
+        return button
 
     def toggle_selection(self) -> None:
         self.checkbox.setChecked(not self.checkbox.isChecked())
