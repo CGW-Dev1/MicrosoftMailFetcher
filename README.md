@@ -1,21 +1,21 @@
-# 邮件验证码助手
-当前版本：V2.1
+# wrmail
+当前版本：V2.2
 本项目包含 Windows 桌面版和 Android App 两个版本，用于批量导入 Outlook/Hotmail 邮箱账号，并通过 Microsoft Graph 或 IMAP OAuth 获取最新邮件、提取验证码。
 
 Android 版定位为“邮箱账号池 + 验证码取件工作台”，适合在手机上完成导入邮箱、选择账号、取验证码、复制验证码、查看结果和导出数据等流程。
 
 ## 下载
 
-Windows 桌面版 exe：
+Windows 桌面版便携包：
 
 ```text
-https://github.com/CGW-Dev1/MicrosoftMailFetcher/raw/main/dist/邮件验证码助手.exe
+https://github.com/CGW-Dev1/MicrosoftMailFetcher/raw/main/dist/wrmail-windows-x64.zip
 ```
 
 Android App APK：
 
 ```text
-https://github.com/CGW-Dev1/MicrosoftMailFetcher/raw/main/android/app/build/outputs/apk/debug/app-debug.apk
+https://github.com/CGW-Dev1/MicrosoftMailFetcher/raw/main/android/app/build/outputs/apk/debug/wrmail-debug.apk
 ```
 
 手机安装 APK 时，如系统提示“未知来源应用”，需要允许当前浏览器或文件管理器安装应用。
@@ -35,7 +35,7 @@ Android 版已经按手机竖屏工作流重构，不是简单照搬桌面布局
 ## 版本规则
 
 - 当前版本从 `V1.0` 开始。
-- 小版本依次递增：`V1.0 -> V1.1 -> ... -> V2.0 -> V2.1`。
+- 小版本依次递增：`V1.0 -> V1.1 -> ... -> V2.1 -> V2.2`。
 - 版本号保存在 `VERSION` 文件中，同时显示在软件标题和主界面标题里。
 
 升级版本号：
@@ -51,29 +51,21 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-## 打包 exe
+## 打包 Windows 便携版
 
-默认生成快速启动目录版：
+生成无 UPX 的目录版、便携 ZIP 和 SHA-256 校验文件：
 
 ```powershell
 .\build.ps1
 ```
 
-exe 位于：
+可执行文件位于：
 
 ```text
-dist\邮件验证码助手\邮件验证码助手.exe
+dist\wrmail\wrmail.exe
 ```
 
-目录中的 `runtime` 必须和 exe 一起分发。目录版无需在每次启动时解压 Qt，启动速度明显快于单文件版。
-
-生成用于 GitHub 直接下载的单文件 exe：
-
-```powershell
-.\build.ps1 -OneFile
-```
-
-单文件 exe 位于 `dist\邮件验证码助手.exe`。依赖已经安装时可添加 `-SkipInstall`，跳过重复的 pip 检查。
+目录中的 `runtime` 必须和 exe 一起分发，因此 GitHub 发布使用 `dist\wrmail-windows-x64.zip`。目录版不会像单文件 PyInstaller 程序一样在启动时把运行环境解压到临时目录，也明确禁用了 UPX。`dist\wrmail-windows-x64.sha256` 用于校验下载文件；依赖已经安装时可添加 `-SkipInstall`。
 
 ## 构建 Android APK
 
@@ -87,7 +79,7 @@ cd android
 构建完成后 APK 位于：
 
 ```text
-android\app\build\outputs\apk\debug\app-debug.apk
+android\app\build\outputs\apk\debug\wrmail-debug.apk
 ```
 
 ## 导入格式
@@ -118,7 +110,7 @@ email@outlook.com----password----client_id----refresh_token----已封禁
 - 支持按邮箱、邮件内容、发件人搜索。
 - 支持导出账号和导出取件结果 CSV。
 - 支持复制邮箱。
-- 支持快速启动目录版和可选单文件版 exe 打包。
+- 支持带版本信息、SHA-256 校验的 Windows 目录版便携包。
 - 支持 Android APK 直接安装使用。
 
 ## 安全说明
@@ -127,3 +119,4 @@ email@outlook.com----password----client_id----refresh_token----已封禁
 - 保存文件使用当前 Windows 用户的 DPAPI 加密。
 - Android 版使用 Android Keystore 加密保存。
 - 导出账号时会导出明文内容，并在末尾带分类，方便备份和迁移。
+- Windows 公开发布包不使用单文件自解压或 UPX 压缩。未签名的新版本仍可能触发 SmartScreen 的“未知应用”提示；长期公开分发应使用可信代码签名或 Microsoft Store。若 Defender 明确将文件识别为恶意程序，可通过 Microsoft Security Intelligence 文件提交页面申请复核：https://www.microsoft.com/en-us/wdsi/filesubmission

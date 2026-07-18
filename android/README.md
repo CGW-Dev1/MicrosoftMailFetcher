@@ -1,4 +1,4 @@
-# 邮件验证码助手 Android 版
+# wrmail Android 版
 
 这是桌面版 exe 的原生 Android 迁移工程，入口在 `app/src/main/java/com/cgwdev/wremail/MainActivity.java`。
 
@@ -32,7 +32,7 @@ sdk.dir=D:/bcenv/android-sdk
 APK 输出：
 
 ```text
-android/app/build/outputs/apk/debug/app-debug.apk
+android/app/build/outputs/apk/debug/wrmail-debug.apk
 ```
 
 ## 注意

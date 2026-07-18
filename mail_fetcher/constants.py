@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 
 APP_NAME = "OutlookHotmailMailFetcher"
-DISPLAY_NAME = "邮件验证码助手"
-APP_VERSION = "V2.1"  # Keep synchronized with VERSION.
+DISPLAY_NAME = "wrmail"
+APP_VERSION = "V2.2"  # Keep synchronized with VERSION.
 
 AUTHORITY_BASE = "https://login.microsoftonline.com"
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"

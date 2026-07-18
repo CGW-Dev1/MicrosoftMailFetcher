@@ -1,5 +1,4 @@
 param(
-    [switch]$OneFile,
     [switch]$SkipInstall
 )
 
@@ -19,8 +18,9 @@ function Remove-GeneratedDirectory([string]$Name) {
 $OriginalLocation = (Get-Location).Path
 try {
     Set-Location -LiteralPath $PSScriptRoot
-    $AppName = -join ([char[]](0x90AE, 0x4EF6, 0x9A8C, 0x8BC1, 0x7801, 0x52A9, 0x624B))
+    $AppName = "wrmail"
     $SpecPath = Join-Path $PSScriptRoot "$AppName.spec"
+    $VersionInfoPath = Join-Path $PSScriptRoot "packaging\windows_version_info.txt"
 
     if (-not $SkipInstall) {
         python -m pip install -r requirements.txt
@@ -37,17 +37,14 @@ try {
         "--clean",
         "--windowed",
         "--optimize", "1",
+        "--noupx",
+        "--onedir",
+        "--contents-directory", "runtime",
         "--name", $AppName,
-        "--icon", ".\assets\mail.ico"
+        "--icon", ".\assets\mail.ico",
+        "--version-file", $VersionInfoPath,
+        "app.py"
     )
-    if ($OneFile) {
-        $PyInstallerArgs += "--onefile"
-    } else {
-        # Directory mode starts immediately because Qt does not need to be
-        # extracted to a temporary folder on every launch.
-        $PyInstallerArgs += @("--onedir", "--contents-directory", "runtime")
-    }
-    $PyInstallerArgs += "app.py"
     python @PyInstallerArgs
     if ($LASTEXITCODE -ne 0) {
         throw "PyInstaller failed with exit code $LASTEXITCODE"
@@ -57,12 +54,19 @@ try {
         Remove-Item -LiteralPath $SpecPath -Force
     }
 
+    $Architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+    $BundlePath = Join-Path $PSScriptRoot "dist\$AppName"
+    $ArchiveName = "$AppName-windows-$Architecture.zip"
+    $ArchivePath = Join-Path $PSScriptRoot "dist\$ArchiveName"
+    $ChecksumPath = Join-Path $PSScriptRoot "dist\$AppName-windows-$Architecture.sha256"
+    Compress-Archive -Path (Join-Path $BundlePath "*") -DestinationPath $ArchivePath -CompressionLevel Optimal
+    $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $ArchivePath).Hash.ToLowerInvariant()
+    Set-Content -LiteralPath $ChecksumPath -Value "$Hash  $ArchiveName" -Encoding ascii
+
     Write-Host ""
-    if ($OneFile) {
-        Write-Host ("Build complete (single-file): dist\" + $AppName + ".exe")
-    } else {
-        Write-Host ("Build complete (fast startup): dist\" + $AppName + "\" + $AppName + ".exe")
-    }
+    Write-Host ("Build complete: dist\" + $AppName + "\" + $AppName + ".exe")
+    Write-Host ("Release archive: dist\" + $ArchiveName)
+    Write-Host ("SHA-256: " + $Hash)
 } finally {
     Set-Location -LiteralPath $OriginalLocation
 }

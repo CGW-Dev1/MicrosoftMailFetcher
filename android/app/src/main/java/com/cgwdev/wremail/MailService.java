@@ -1,5 +1,7 @@
 package com.cgwdev.wremail;
 
+import android.text.Html;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -23,11 +25,11 @@ import java.util.Properties;
 import javax.net.ssl.SSLException;
 
 import javax.mail.Address;
-import javax.mail.BodyPart;
 import javax.mail.Flags;
 import javax.mail.Folder;
 import javax.mail.Message;
 import javax.mail.Multipart;
+import javax.mail.Part;
 import javax.mail.Session;
 import javax.mail.Store;
 import javax.mail.internet.MimeUtility;
@@ -279,36 +281,55 @@ final class MailService {
     }
 
     private String extractText(Object part) throws Exception {
-        if (part instanceof Message) {
-            Message message = (Message) part;
-            if (message.isMimeType("text/plain")) {
-                Object content = message.getContent();
-                return content == null ? "" : String.valueOf(content);
+        BodyCandidates candidates = new BodyCandidates();
+        collectBodyText(part, candidates);
+        return firstNonEmpty(candidates.plainText, candidates.htmlText);
+    }
+
+    private void collectBodyText(Object value, BodyCandidates candidates) throws Exception {
+        if (value instanceof Multipart) {
+            Multipart multipart = (Multipart) value;
+            for (int i = 0; i < multipart.getCount(); i++) {
+                collectBodyText(multipart.getBodyPart(i), candidates);
             }
-            if (message.isMimeType("multipart/*")) {
-                return extractText(message.getContent());
-            }
+            return;
+        }
+        if (!(value instanceof Part)) {
+            return;
+        }
+
+        Part part = (Part) value;
+        String disposition = part.getDisposition();
+        if ((disposition != null && disposition.equalsIgnoreCase(Part.ATTACHMENT)) || part.getFileName() != null) {
+            return;
+        }
+        if (part.isMimeType("multipart/*")) {
+            collectBodyText(part.getContent(), candidates);
+            return;
+        }
+        if (part.isMimeType("text/plain") && candidates.plainText.isEmpty()) {
+            candidates.plainText = readTextContent(part.getContent()).trim();
+            return;
+        }
+        if (part.isMimeType("text/html") && candidates.htmlText.isEmpty()) {
+            String html = readTextContent(part.getContent());
+            candidates.htmlText = Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY).toString().trim();
+        }
+    }
+
+    private String readTextContent(Object content) throws Exception {
+        if (content == null) {
             return "";
         }
-        if (part instanceof Multipart) {
-            Multipart multipart = (Multipart) part;
-            String fallback = "";
-            for (int i = 0; i < multipart.getCount(); i++) {
-                BodyPart bodyPart = multipart.getBodyPart(i);
-                if (bodyPart.getDisposition() != null && bodyPart.getDisposition().equalsIgnoreCase(BodyPart.ATTACHMENT)) {
-                    continue;
-                }
-                if (bodyPart.isMimeType("text/plain")) {
-                    Object content = bodyPart.getContent();
-                    return content == null ? "" : String.valueOf(content);
-                }
-                if (bodyPart.isMimeType("multipart/*")) {
-                    fallback = firstNonEmpty(fallback, extractText(bodyPart.getContent()));
-                }
-            }
-            return fallback;
+        if (content instanceof InputStream) {
+            return readAll((InputStream) content);
         }
-        return "";
+        return String.valueOf(content);
+    }
+
+    private static final class BodyCandidates {
+        String plainText = "";
+        String htmlText = "";
     }
 
     private String decodeAddresses(Address[] addresses) throws Exception {

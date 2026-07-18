@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 from mail_fetcher.models import AccountRecord
+from mail_fetcher.parsing import parse_imap_message
 from mail_fetcher.services import ImapMailClient
 from mail_fetcher.storage import ConfigStore
 
@@ -17,6 +18,30 @@ RAW_MESSAGE = (
     b"Date: Tue, 14 Jul 2026 10:00:00 +0800\r\n"
     b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
     b"Your code is 482915."
+)
+
+HTML_ONLY_MESSAGE = (
+    b"From: OpenAI <noreply@example.com>\r\n"
+    b"To: person@example.com\r\n"
+    b"Subject: Your temporary login code\r\n"
+    b"Date: Tue, 14 Jul 2026 10:00:00 +0800\r\n"
+    b"MIME-Version: 1.0\r\n"
+    b"Content-Type: text/html; charset=utf-8\r\n"
+    b"Content-Transfer-Encoding: quoted-printable\r\n\r\n"
+    b"<html><head><style>.hidden{display:none}</style></head><body>"
+    b"<h1>Sign in to OpenAI</h1><p>Your verification code is <strong>593821</strong>.</p>"
+    b"<script>ignoreThis()</script></body></html>"
+)
+
+MULTIPART_MESSAGE = (
+    b"From: Service <notice@example.com>\r\n"
+    b"Subject: Alternative message\r\n"
+    b"MIME-Version: 1.0\r\n"
+    b"Content-Type: multipart/alternative; boundary=mail-boundary\r\n\r\n"
+    b"--mail-boundary\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+    b"Preferred plain text code 774411.\r\n"
+    b"--mail-boundary\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
+    b"<p>HTML code 000000.</p>\r\n--mail-boundary--\r\n"
 )
 
 
@@ -46,6 +71,17 @@ class FakeImap:
 
 
 class ImapTests(unittest.TestCase):
+    def test_html_only_imap_message_has_readable_body_preview(self) -> None:
+        row = parse_imap_message(HTML_ONLY_MESSAGE, "person@example.com")
+        self.assertIn("Sign in to OpenAI", row["preview"])
+        self.assertIn("593821", row["preview"])
+        self.assertNotIn("ignoreThis", row["preview"])
+        self.assertNotIn(".hidden", row["preview"])
+
+    def test_multipart_imap_message_prefers_plain_text(self) -> None:
+        row = parse_imap_message(MULTIPART_MESSAGE, "person@example.com")
+        self.assertEqual(row["preview"], "Preferred plain text code 774411.")
+
     def test_imap_uses_uid_and_peek_without_marking_mail_read(self) -> None:
         fake = FakeImap()
         client = ImapMailClient.__new__(ImapMailClient)

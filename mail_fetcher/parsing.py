@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
+from html.parser import HTMLParser
 
 from .constants import (
     ACCOUNT_CATEGORY_BANNED,
@@ -17,6 +18,71 @@ from .constants import (
 from .models import ImportRecord, PhoneImportRecord
 
 PHONE_RE = re.compile(r"^\+\d{6,18}$")
+
+_HTML_BLOCK_TAGS = {
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "br",
+    "div",
+    "footer",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "hr",
+    "li",
+    "main",
+    "nav",
+    "ol",
+    "p",
+    "section",
+    "table",
+    "td",
+    "th",
+    "tr",
+    "ul",
+}
+_HTML_IGNORED_TAGS = {"head", "script", "style", "template"}
+
+
+class _HtmlTextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.chunks: list[str] = []
+        self.ignored_tags: list[str] = []
+
+    def handle_starttag(self, tag: str, _attrs) -> None:
+        tag = tag.lower()
+        if tag in _HTML_IGNORED_TAGS:
+            self.ignored_tags.append(tag)
+            return
+        if not self.ignored_tags and tag in _HTML_BLOCK_TAGS:
+            self.chunks.append("\n")
+
+    def handle_startendtag(self, tag: str, _attrs) -> None:
+        if not self.ignored_tags and tag.lower() in _HTML_BLOCK_TAGS:
+            self.chunks.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if self.ignored_tags:
+            if tag == self.ignored_tags[-1]:
+                self.ignored_tags.pop()
+            return
+        if tag in _HTML_BLOCK_TAGS:
+            self.chunks.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self.ignored_tags:
+            self.chunks.append(data)
+
+    def text(self) -> str:
+        return " ".join("".join(self.chunks).split())
 
 
 def normalize_account_category(value: str | None) -> str:
@@ -137,17 +203,60 @@ def decode_mime_header(value: str | None) -> str:
     return "".join(parts).strip()
 
 
+def _decode_text_part(part: email.message.Message) -> str:
+    payload = part.get_payload(decode=True)
+    if payload is None:
+        undecoded = part.get_payload()
+        return undecoded if isinstance(undecoded, str) else ""
+    if isinstance(payload, str):
+        return payload
+
+    charset = part.get_content_charset()
+    if charset:
+        try:
+            return payload.decode(charset, errors="replace")
+        except LookupError:
+            pass
+    try:
+        return payload.decode("utf-8")
+    except UnicodeDecodeError:
+        return payload.decode("windows-1252", errors="replace")
+
+
+def _html_to_text(value: str) -> str:
+    parser = _HtmlTextExtractor()
+    try:
+        parser.feed(value)
+        parser.close()
+    except Exception:
+        # Keep malformed marketing emails readable instead of dropping the body.
+        return " ".join(re.sub(r"<[^>]+>", " ", value).split())
+    return parser.text()
+
+
 def extract_preview(message: email.message.Message) -> str:
-    if message.is_multipart():
-        for part in message.walk():
-            if part.get_content_disposition() == "attachment":
-                continue
-            if part.get_content_type() == "text/plain":
-                raw = part.get_payload(decode=True) or b""
-                return raw.decode(part.get_content_charset() or "utf-8", errors="replace").strip()[:800]
-    if message.get_content_type() == "text/plain":
-        raw = message.get_payload(decode=True) or b""
-        return raw.decode(message.get_content_charset() or "utf-8", errors="replace").strip()[:800]
+    plain_parts: list[email.message.Message] = []
+    html_parts: list[email.message.Message] = []
+    parts = message.walk() if message.is_multipart() else [message]
+    for part in parts:
+        if part.is_multipart():
+            continue
+        if part.get_content_disposition() == "attachment" or part.get_filename():
+            continue
+        content_type = part.get_content_type().lower()
+        if content_type == "text/plain":
+            plain_parts.append(part)
+        elif content_type == "text/html":
+            html_parts.append(part)
+
+    for part in plain_parts:
+        text = " ".join(_decode_text_part(part).split())
+        if text:
+            return text[:800]
+    for part in html_parts:
+        text = _html_to_text(_decode_text_part(part))
+        if text:
+            return text[:800]
     return ""
 
 

@@ -1,14 +1,23 @@
 __pycache__/
 *.py[cod]
 
-build/
-dist/
+/build/
+dist/*
+!dist/wrmail-windows-*.zip
+!dist/wrmail-windows-*.sha256
 *.spec
 qt_*.png
 android/.gradle/
 android/build/
 android/local.properties
-android/app/build/
+android/app/build/*
+!android/app/build/outputs/
+android/app/build/outputs/*
+!android/app/build/outputs/apk/
+android/app/build/outputs/apk/*
+!android/app/build/outputs/apk/debug/
+android/app/build/outputs/apk/debug/*
+!android/app/build/outputs/apk/debug/wrmail-debug.apk
 *.aab
 *.jks
 *.keystore

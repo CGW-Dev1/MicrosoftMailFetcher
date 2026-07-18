@@ -10,8 +10,8 @@ android {
         applicationId "com.cgwdev.wremail"
         minSdk 26
         targetSdk 35
-        versionCode 21
-        versionName "2.1"
+        versionCode 22
+        versionName "2.2"
     }
 
     compileOptions {
@@ -26,6 +26,12 @@ android {
                     "META-INF/NOTICE.md"
             ]
         }
+    }
+}
+
+android.applicationVariants.configureEach { variant ->
+    variant.outputs.configureEach {
+        outputFileName = "wrmail-${variant.buildType.name}.apk"
     }
 }
 
